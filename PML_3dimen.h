@@ -10,6 +10,12 @@
 
 using namespace std;
 
+template <class ftypePML>
+ftypePML func_R(int n, ftypePML sigma_max, int delta, ftypePML step)
+{
+	return (ftypePML)exp(-(2.0 * (ftypePML)sigma_max * (ftypePML)delta * step)/ (ftypePML)(n + 1));
+}
+
 template <class ftype>
 void Initializing_FDTD_3_dimen_Gauss_PML(vector< vector<vector<Component<ftype>>>>& cube,
 	int Nx, int Ny, int Nz, int delta, ftype dx, ftype dy, ftype dz, const ftype dt, int index_start, Direction direction,
@@ -163,54 +169,57 @@ void Initializing_FDTD_3_dimen_Gauss_PML(vector< vector<vector<Component<ftype>>
 		}
 }
 
-template <class ftype>
-void Initializing_cube_split_3_dimen_PML(vector< vector<vector<ComponentSplit<ftype>>>>& cube_split, int Nx, int Ny, int Nz, int delta)
+template <class ftypePML>
+void Initializing_cube_split_3_dimen_PML(vector< vector<vector<ComponentSplit<ftypePML>>>>& cube_split, int Nx, int Ny, int Nz, int delta)
 {
 	for (int i = 0; i < Nx + 2 * delta +2; i++)
 		for (int j = 0; j < Ny + 2 * delta +2; j++)
 			for (int k = 0; k < Nz + 2 * delta + 2; k++) {			
-				cube_split[i][j][k].Exy = (ftype)0.0;
-				cube_split[i][j][k].Exz = (ftype)0.0;
-				cube_split[i][j][k].Eyx = (ftype)0.0;
-				cube_split[i][j][k].Eyz = (ftype)0.0;
-				cube_split[i][j][k].Ezx = (ftype)0.0;
-				cube_split[i][j][k].Ezy = (ftype)0.0;
+				cube_split[i][j][k].Exy = (ftypePML)0.0;
+				cube_split[i][j][k].Exz = (ftypePML)0.0;
+				cube_split[i][j][k].Eyx = (ftypePML)0.0;
+				cube_split[i][j][k].Eyz = (ftypePML)0.0;
+				cube_split[i][j][k].Ezx = (ftypePML)0.0;
+				cube_split[i][j][k].Ezy = (ftypePML)0.0;
 
-				cube_split[i][j][k].Bxy = (ftype)0.0;
-				cube_split[i][j][k].Bxz = (ftype)0.0;
-				cube_split[i][j][k].Byx = (ftype)0.0;
-				cube_split[i][j][k].Byz = (ftype)0.0;
-				cube_split[i][j][k].Bzx = (ftype)0.0;
-				cube_split[i][j][k].Bzy = (ftype)0.0;
+				cube_split[i][j][k].Bxy = (ftypePML)0.0;
+				cube_split[i][j][k].Bxz = (ftypePML)0.0;
+				cube_split[i][j][k].Byx = (ftypePML)0.0;
+				cube_split[i][j][k].Byz = (ftypePML)0.0;
+				cube_split[i][j][k].Bzx = (ftypePML)0.0;
+				cube_split[i][j][k].Bzy = (ftypePML)0.0;
 			}
 }
 
-template <class ftype>
-void Initializing_Sigma_3_dimen_PML(vector< vector<vector<SIGMA<ftype>>>>& Sigma, int Nx, int Ny, int Nz, ftype dx, ftype dy, ftype dz,
-	int delta, int n, double R)
+template <class ftypePML>
+void Initializing_Sigma_3_dimen_PML(vector< vector<vector<SIGMA<ftypePML>>>>& Sigma, int Nx, int Ny, int Nz, int delta, int n,
+	ftypePML sigma_x, ftypePML sigma_y)
 {
-	ftype var_Sigma_max_x = Sigma_max<ftype>(n, R, delta, dx);
-	ftype var_Sigma_max_y = Sigma_max<ftype>(n, R, delta, dy);
-	ftype var_Sigma_max_z = Sigma_max<ftype>(n, R, delta, dz);
+	ftypePML var_Sigma_max_x = sigma_x;
+	ftypePML var_Sigma_max_y = sigma_y;
+	ftypePML var_Sigma_max_z = sigma_y;
 
 	cout << var_Sigma_max_x << "  " << var_Sigma_max_y << "   " << var_Sigma_max_z << "    " << endl;
+
+	//cout << func_R(n, var_Sigma_max_x, delta, dx) << endl;
 
 	for(int i = 1; i < Nx + 2 * delta + 1; i++)
 		for (int j = 1; j < Ny + 2 * delta + 1; j++)
 			for (int k = 1; k < Nz + 2 * delta + 1; k++) {
-				Sigma[i][j][k].sigmaE_x = var_Sigma_max_x * pow(distanceE<ftype>(Nx, delta, i), n); 
-				Sigma[i][j][k].sigmaH_x = var_Sigma_max_x * pow(distanceH<ftype>(Nx, delta, i), n);
+				Sigma[i][j][k].sigmaE_x = var_Sigma_max_x * pow(distanceE<ftypePML>(Nx, delta, i), n); 
+				Sigma[i][j][k].sigmaH_x = var_Sigma_max_x * pow(distanceH<ftypePML>(Nx, delta, i), n);
 	
-				Sigma[i][j][k].sigmaE_y = var_Sigma_max_y * pow(distanceE<ftype>(Ny, delta, j), n);
-				Sigma[i][j][k].sigmaH_y = var_Sigma_max_y * pow(distanceH<ftype>(Ny, delta, j), n);
+				Sigma[i][j][k].sigmaE_y = var_Sigma_max_y * pow(distanceE<ftypePML>(Ny, delta, j), n);
+				Sigma[i][j][k].sigmaH_y = var_Sigma_max_y * pow(distanceH<ftypePML>(Ny, delta, j), n);
 
-				Sigma[i][j][k].sigmaE_z = var_Sigma_max_z * pow(distanceE<ftype>(Nz, delta, k), n);
-				Sigma[i][j][k].sigmaH_z = var_Sigma_max_z * pow(distanceH<ftype>(Nz, delta, k), n);
+				Sigma[i][j][k].sigmaE_z = var_Sigma_max_z * pow(distanceE<ftypePML>(Nz, delta, k), n);
+				Sigma[i][j][k].sigmaH_z = var_Sigma_max_z * pow(distanceH<ftypePML>(Nz, delta, k), n);
 			}
+	//cout << sizeof(Sigma[10][18][11].sigmaH_x) << sizeof(double) << sizeof(float) << endl;
 }
 
-template <class ftype>
-void Initializing_Coeff_3_dimen_PML(vector< vector<vector<COEFF<ftype>>>>& Coeff, vector< vector<vector<SIGMA<ftype>>>>& Sigma, int Nx, int Ny, int Nz, int delta, ftype dt)
+template <class ftypePML>
+void Initializing_Coeff_3_dimen_PML(vector< vector<vector<COEFF<ftypePML>>>>& Coeff, vector< vector<vector<SIGMA<ftypePML>>>>& Sigma, int Nx, int Ny, int Nz, int delta, ftypePML dt)
 {
 	for (int i = 1; i < Nx + 2 * delta + 1; i++)
 		for (int j = 1; j < Ny + 2 * delta + 1; j++)
@@ -219,67 +228,67 @@ void Initializing_Coeff_3_dimen_PML(vector< vector<vector<COEFF<ftype>>>>& Coeff
 				{
 				}
 				else {
-					Coeff[i][j][k].Exy1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaE_y);
-					Coeff[i][j][k].Exz1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaE_z);
-					Coeff[i][j][k].Eyx1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaE_x);
-					Coeff[i][j][k].Eyz1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaE_z);
-					Coeff[i][j][k].Ezx1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaE_x);
-					Coeff[i][j][k].Ezy1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaE_y);
+					Coeff[i][j][k].Exy1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaE_y);
+					Coeff[i][j][k].Exz1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaE_z);
+					Coeff[i][j][k].Eyx1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaE_x);
+					Coeff[i][j][k].Eyz1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaE_z);
+					Coeff[i][j][k].Ezx1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaE_x);
+					Coeff[i][j][k].Ezy1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaE_y);
 
-					Coeff[i][j][k].Bxy1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaH_y);
-					Coeff[i][j][k].Bxz1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaH_z);
-					Coeff[i][j][k].Byx1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaH_x);
-					Coeff[i][j][k].Byz1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaH_z);
-					Coeff[i][j][k].Bzx1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaH_x);
-					Coeff[i][j][k].Bzy1 = (ftype)exp(-dt * Sigma[i][j][k].sigmaH_y);
+					Coeff[i][j][k].Bxy1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaH_y);
+					Coeff[i][j][k].Bxz1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaH_z);
+					Coeff[i][j][k].Byx1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaH_x);
+					Coeff[i][j][k].Byz1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaH_z);
+					Coeff[i][j][k].Bzx1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaH_x);
+					Coeff[i][j][k].Bzy1 = (ftypePML)exp(-dt * Sigma[i][j][k].sigmaH_y);
 
-					if (Sigma[i][j][k].sigmaE_x != (ftype)0.0) {
-						Coeff[i][j][k].Eyx2 = (ftype)1.0 / Sigma[i][j][k].sigmaE_x * ((ftype)1.0 - Coeff[i][j][k].Eyx1);
-						Coeff[i][j][k].Ezx2 = (ftype)1.0 / Sigma[i][j][k].sigmaE_x * ((ftype)1.0 - Coeff[i][j][k].Ezx1);
+					if (Sigma[i][j][k].sigmaE_x != (ftypePML)0.0) {
+						Coeff[i][j][k].Eyx2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaE_x * ((ftypePML)1.0 - Coeff[i][j][k].Eyx1);
+						Coeff[i][j][k].Ezx2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaE_x * ((ftypePML)1.0 - Coeff[i][j][k].Ezx1);
 					}
 					else {
 						Coeff[i][j][k].Eyx2 = dt;
 						Coeff[i][j][k].Ezx2 = dt;
 					}
-					if (Sigma[i][j][k].sigmaE_y != (ftype)0.0) {
-						Coeff[i][j][k].Exy2 = (ftype)1.0 / Sigma[i][j][k].sigmaE_y * ((ftype)1.0 - Coeff[i][j][k].Exy1);
-						Coeff[i][j][k].Ezy2 = (ftype)1.0 / Sigma[i][j][k].sigmaE_y * ((ftype)1.0 - Coeff[i][j][k].Ezy1);
+					if (Sigma[i][j][k].sigmaE_y != (ftypePML)0.0) {
+						Coeff[i][j][k].Exy2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaE_y * ((ftypePML)1.0 - Coeff[i][j][k].Exy1);
+						Coeff[i][j][k].Ezy2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaE_y * ((ftypePML)1.0 - Coeff[i][j][k].Ezy1);
 					}
 					else {
 						Coeff[i][j][k].Exy2 = dt;
 						Coeff[i][j][k].Ezy2 = dt;
 					}
-					if (Sigma[i][j][k].sigmaE_z != (ftype)0.0)
+					if (Sigma[i][j][k].sigmaE_z != (ftypePML)0.0)
 					{
-						Coeff[i][j][k].Exz2 = (ftype)1.0 / Sigma[i][j][k].sigmaE_z * ((ftype)1.0 - Coeff[i][j][k].Exz1);
-						Coeff[i][j][k].Eyz2 = (ftype)1.0 / Sigma[i][j][k].sigmaE_z * ((ftype)1.0 - Coeff[i][j][k].Eyz1);
+						Coeff[i][j][k].Exz2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaE_z * ((ftypePML)1.0 - Coeff[i][j][k].Exz1);
+						Coeff[i][j][k].Eyz2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaE_z * ((ftypePML)1.0 - Coeff[i][j][k].Eyz1);
 					}
 					else {
 						Coeff[i][j][k].Exz2 = dt;
 						Coeff[i][j][k].Eyz2 = dt;
 					}
-					if (Sigma[i][j][k].sigmaH_x != (ftype)0.0)
+					if (Sigma[i][j][k].sigmaH_x != (ftypePML)0.0)
 					{
-						Coeff[i][j][k].Byx2 = (ftype)1.0 / Sigma[i][j][k].sigmaH_x * ((ftype)1.0 - Coeff[i][j][k].Byx1);
-						Coeff[i][j][k].Bzx2 = (ftype)1.0 / Sigma[i][j][k].sigmaH_x * ((ftype)1.0 - Coeff[i][j][k].Bzx1);
+						Coeff[i][j][k].Byx2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaH_x * ((ftypePML)1.0 - Coeff[i][j][k].Byx1);
+						Coeff[i][j][k].Bzx2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaH_x * ((ftypePML)1.0 - Coeff[i][j][k].Bzx1);
 					}
 					else {
 						Coeff[i][j][k].Byx2 = dt;
 						Coeff[i][j][k].Bzx2 = dt;
 					}
-					if (Sigma[i][j][k].sigmaH_y != (ftype)0.0)
+					if (Sigma[i][j][k].sigmaH_y != (ftypePML)0.0)
 					{
-						Coeff[i][j][k].Bxy2 = (ftype)1.0 / Sigma[i][j][k].sigmaH_y * ((ftype)1.0 - Coeff[i][j][k].Bxy1);
-						Coeff[i][j][k].Bzy2 = (ftype)1.0 / Sigma[i][j][k].sigmaH_y * ((ftype)1.0 - Coeff[i][j][k].Bzy1);
+						Coeff[i][j][k].Bxy2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaH_y * ((ftypePML)1.0 - Coeff[i][j][k].Bxy1);
+						Coeff[i][j][k].Bzy2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaH_y * ((ftypePML)1.0 - Coeff[i][j][k].Bzy1);
 					}
 					else {
 						Coeff[i][j][k].Bxy2 = dt;
 						Coeff[i][j][k].Bzy2 = dt;
 					}
-					if (Sigma[i][j][k].sigmaH_z != (ftype)0.0)
+					if (Sigma[i][j][k].sigmaH_z != (ftypePML)0.0)
 					{
-						Coeff[i][j][k].Bxz2 = (ftype)1.0 / Sigma[i][j][k].sigmaH_z * ((ftype)1.0 - Coeff[i][j][k].Bxz1);
-						Coeff[i][j][k].Byz2 = (ftype)1.0 / Sigma[i][j][k].sigmaH_z * ((ftype)1.0 - Coeff[i][j][k].Byz1);
+						Coeff[i][j][k].Bxz2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaH_z * ((ftypePML)1.0 - Coeff[i][j][k].Bxz1);
+						Coeff[i][j][k].Byz2 = (ftypePML)1.0 / Sigma[i][j][k].sigmaH_z * ((ftypePML)1.0 - Coeff[i][j][k].Byz1);
 					}
 					else {
 						Coeff[i][j][k].Bxz2 = dt;
@@ -287,28 +296,28 @@ void Initializing_Coeff_3_dimen_PML(vector< vector<vector<COEFF<ftype>>>>& Coeff
 					}
 				}
 		}
+	// cout << sizeof(Coeff[1][5][4].Bxy2) << sizeof(Coeff[2][4][3].Exz1) << endl;
+
 }
 
-template <class ftype>
+template <class ftype, class ftypePML>
 void Update_electric_field_three_dimen_PML(vector< vector<vector<Component<ftype>>>>& cube,
-	vector< vector<vector<ComponentSplit<ftype>>>>& cube_split, vector< vector<vector<COEFF<ftype>>>>& Coeff,
-	ftype _1dx, ftype _1dy, ftype _1dz, int i, int j, int k)
+	vector< vector<vector<ComponentSplit<ftypePML>>>>& cube_split, vector< vector<vector<COEFF<ftypePML>>>>& Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
 {
-	ftype tExy, tExz, tEyx, tEyz, tEzx, tEzy;
+	ftypePML tExy, tExz, tEyx, tEyz, tEzx, tEzy;
 
-	// ftype -> ftypePML  (static cast)
+	tExy = cube_split[i][j][k].Exy * Coeff[i][j][k].Exy1 + ((ftypePML)cube[i][j + 1][k].Bz - (ftypePML)cube[i][j][k].Bz) * Coeff[i][j][k].Exy2 * (_1dy);
 
-	tExy = cube_split[i][j][k].Exy * Coeff[i][j][k].Exy1 + (cube[i][j + 1][k].Bz - cube[i][j][k].Bz) * Coeff[i][j][k].Exy2 * (_1dy);
+	tExz = cube_split[i][j][k].Exz * Coeff[i][j][k].Exz1 - ((ftypePML)cube[i][j][k + 1].By - (ftypePML)cube[i][j][k].By) * Coeff[i][j][k].Exz2 * (_1dz);
 
-	tExz = cube_split[i][j][k].Exz * Coeff[i][j][k].Exz1 - (cube[i][j][k + 1].By - cube[i][j][k].By) * Coeff[i][j][k].Exz2 * (_1dz);
+	tEyx = cube_split[i][j][k].Eyx * Coeff[i][j][k].Eyx1 - ((ftypePML)cube[i + 1][j][k].Bz - (ftypePML)cube[i][j][k].Bz) * Coeff[i][j][k].Eyx2 * (_1dx);
 
-	tEyx = cube_split[i][j][k].Eyx * Coeff[i][j][k].Eyx1 - (cube[i + 1][j][k].Bz - cube[i][j][k].Bz) * Coeff[i][j][k].Eyx2 * (_1dx);
+	tEyz = cube_split[i][j][k].Eyz * Coeff[i][j][k].Eyz1 + ((ftypePML)cube[i][j][k + 1].Bx - (ftypePML)cube[i][j][k].Bx) * Coeff[i][j][k].Eyz2 * (_1dz);
 
-	tEyz = cube_split[i][j][k].Eyz * Coeff[i][j][k].Eyz1 + (cube[i][j][k + 1].Bx - cube[i][j][k].Bx) * Coeff[i][j][k].Eyz2 * (_1dz);
+	tEzx = cube_split[i][j][k].Ezx * Coeff[i][j][k].Ezx1 + ((ftypePML)cube[i + 1][j][k].By - (ftypePML)cube[i][j][k].By) * Coeff[i][j][k].Ezx2 * (_1dx);
 
-	tEzx = cube_split[i][j][k].Ezx * Coeff[i][j][k].Ezx1 + (cube[i + 1][j][k].By - cube[i][j][k].By) * Coeff[i][j][k].Ezx2 * (_1dx);
-
-	tEzy = cube_split[i][j][k].Ezy * Coeff[i][j][k].Ezy1 - (cube[i][j + 1][k].Bx - cube[i][j][k].Bx) * Coeff[i][j][k].Ezy2 * (_1dy);
+	tEzy = cube_split[i][j][k].Ezy * Coeff[i][j][k].Ezy1 - ((ftypePML)cube[i][j + 1][k].Bx - (ftypePML)cube[i][j][k].Bx) * Coeff[i][j][k].Ezy2 * (_1dy);
 
 	cube_split[i][j][k].Exy = tExy;
 	cube_split[i][j][k].Exz = tExz;
@@ -316,29 +325,30 @@ void Update_electric_field_three_dimen_PML(vector< vector<vector<Component<ftype
 	cube_split[i][j][k].Eyz = tEyz;
 	cube_split[i][j][k].Ezx = tEzx;
 	cube_split[i][j][k].Ezy = tEzy;
-	cube[i][j][k].Ex = tExy + tExz;
-	cube[i][j][k].Ey = tEyx + tEyz;
-	cube[i][j][k].Ez = tEzx + tEzy;
+
+	cube[i][j][k].Ex = (ftype)(tExy + tExz);
+	cube[i][j][k].Ey = (ftype)(tEyx + tEyz);
+	cube[i][j][k].Ez = (ftype)(tEzx + tEzy);
 }
 
-template <class ftype>
+template <class ftype, class ftypePML>
 void Update_magnetic_field_three_dimen_PML(vector< vector<vector<Component<ftype>>>>& cube,
-	vector< vector<vector<ComponentSplit<ftype>>>>& cube_split, vector< vector<vector<COEFF<ftype>>>>& Coeff,
-	ftype _1dx, ftype _1dy, ftype _1dz, int i, int j, int k)
+	vector< vector<vector<ComponentSplit<ftypePML>>>>& cube_split, vector< vector<vector<COEFF<ftypePML>>>>& Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
 {
-	ftype tBxy, tBxz, tByx, tByz, tBzx, tBzy;
+	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
 
-	tBxy = cube_split[i][j][k].Bxy * Coeff[i][j][k].Bxy1 - (cube[i][j][k].Ez - cube[i][j - 1][k].Ez) * Coeff[i][j][k].Bxy2 * (_1dy);
+	tBxy = cube_split[i][j][k].Bxy * Coeff[i][j][k].Bxy1 - ((ftypePML)cube[i][j][k].Ez - (ftypePML)cube[i][j - 1][k].Ez) * Coeff[i][j][k].Bxy2 * (_1dy);
 
-	tBxz = cube_split[i][j][k].Bxz * Coeff[i][j][k].Bxz1 + (cube[i][j][k].Ey - cube[i][j][k - 1].Ey) * Coeff[i][j][k].Bxz2 * (_1dz);
+	tBxz = cube_split[i][j][k].Bxz * Coeff[i][j][k].Bxz1 + ((ftypePML)cube[i][j][k].Ey - (ftypePML)cube[i][j][k - 1].Ey) * Coeff[i][j][k].Bxz2 * (_1dz);
 
-	tByx = cube_split[i][j][k].Byx * Coeff[i][j][k].Byx1 + (cube[i][j][k].Ez - cube[i - 1][j][k].Ez) * Coeff[i][j][k].Byx2 * (_1dx);
+	tByx = cube_split[i][j][k].Byx * Coeff[i][j][k].Byx1 + ((ftypePML)cube[i][j][k].Ez - (ftypePML)cube[i - 1][j][k].Ez) * Coeff[i][j][k].Byx2 * (_1dx);
 
-	tByz = cube_split[i][j][k].Byz * Coeff[i][j][k].Byz1 - (cube[i][j][k].Ex - cube[i][j][k - 1].Ex) * Coeff[i][j][k].Byz2 * (_1dz);
+	tByz = cube_split[i][j][k].Byz * Coeff[i][j][k].Byz1 - ((ftypePML)cube[i][j][k].Ex - (ftypePML)cube[i][j][k - 1].Ex) * Coeff[i][j][k].Byz2 * (_1dz);
 
-	tBzx = cube_split[i][j][k].Bzx * Coeff[i][j][k].Bzx1 - (cube[i][j][k].Ey - cube[i - 1][j][k].Ey) * Coeff[i][j][k].Bzx2 * (_1dx);
+	tBzx = cube_split[i][j][k].Bzx * Coeff[i][j][k].Bzx1 - ((ftypePML)cube[i][j][k].Ey - (ftypePML)cube[i - 1][j][k].Ey) * Coeff[i][j][k].Bzx2 * (_1dx);
 
-	tBzy = cube_split[i][j][k].Bzy * Coeff[i][j][k].Bzy1 + (cube[i][j][k].Ex - cube[i][j - 1][k].Ex) * Coeff[i][j][k].Bzy2 * (_1dy);
+	tBzy = cube_split[i][j][k].Bzy * Coeff[i][j][k].Bzy1 + ((ftypePML)cube[i][j][k].Ex - (ftypePML)cube[i][j - 1][k].Ex) * Coeff[i][j][k].Bzy2 * (_1dy);
 	
 	cube_split[i][j][k].Bxy = tBxy;
 	cube_split[i][j][k].Bxz = tBxz;
@@ -346,9 +356,10 @@ void Update_magnetic_field_three_dimen_PML(vector< vector<vector<Component<ftype
 	cube_split[i][j][k].Byz = tByz;
 	cube_split[i][j][k].Bzx = tBzx;
 	cube_split[i][j][k].Bzy = tBzy;
-	cube[i][j][k].Bx = tBxy + tBxz;
-	cube[i][j][k].By = tByx + tByz;
-	cube[i][j][k].Bz = tBzx + tBzy;
+
+	cube[i][j][k].Bx = (ftype)(tBxy + tBxz);
+	cube[i][j][k].By = (ftype)(tByx + tByz);
+	cube[i][j][k].Bz = (ftype)(tBzx + tBzy);
 }
 
 template <class ftype>
@@ -406,8 +417,8 @@ void Add_Currents_3_dimen(vector< vector<vector<Component<ftype>>>>& cube,
 
 }
 
-template <class ftype>
-double FDTD_three_dimen_with_PML(int Nx, int Ny, int Nz, ftype T, ftype dt, int delta, double R, string type_sum, string name_file)
+template <class ftype, class ftypePML>
+double FDTD_three_dimen_with_PML(int Nx, int Ny, int Nz, ftype T, ftype dt, int delta, ftypePML sigma_x, ftypePML sigma_y, string type_sum, string name_file)
 {
 	setlocale(LC_ALL, "Russian");
 
@@ -415,40 +426,47 @@ double FDTD_three_dimen_with_PML(int Nx, int Ny, int Nz, ftype T, ftype dt, int 
 	// delta  =  width boundary layer
 
 	vector<vector<vector<Component<ftype>>>> cube(Nx + 2 * delta + 2, vector<vector<Component<ftype>>>(Ny + 2 * delta + 2, vector<Component<ftype>>(Nz + 2 * delta + 2)));
-	vector< vector<vector<ComponentSplit<ftype>>>> cube_split(Nx + 2 * delta + 2, vector< vector<ComponentSplit<ftype>>>(Ny + 2 * delta + 2, vector<ComponentSplit<ftype>>(Nz + 2 * delta + 2)));
-	vector< vector<vector<SIGMA<ftype>>>> Sigma(Nx + 2 * delta + 2, vector< vector<SIGMA<ftype>>>(Ny + 2 * delta + 2, vector<SIGMA<ftype>>(Nz + 2 * delta + 2)));
-	vector< vector<vector<COEFF<ftype>>>> Coeff(Nx + 2 * delta + 2, vector< vector<COEFF<ftype>>>(Ny + 2 * delta + 2, vector<COEFF<ftype>>(Nz + 2 * delta + 2)));
+	vector< vector<vector<ComponentSplit<ftypePML>>>> cube_split(Nx + 2 * delta + 2, vector< vector<ComponentSplit<ftypePML>>>(Ny + 2 * delta + 2, vector<ComponentSplit<ftypePML>>(Nz + 2 * delta + 2)));
+	vector< vector<vector<SIGMA<ftypePML>>>> Sigma(Nx + 2 * delta + 2, vector< vector<SIGMA<ftypePML>>>(Ny + 2 * delta + 2, vector<SIGMA<ftypePML>>(Nz + 2 * delta + 2)));
+	vector< vector<vector<COEFF<ftypePML>>>> Coeff(Nx + 2 * delta + 2, vector< vector<COEFF<ftypePML>>>(Ny + 2 * delta + 2, vector<COEFF<ftypePML>>(Nz + 2 * delta + 2)));
 
 	pair<ftype, ftype> ab(0.0, 4.0 * M_PI), cd(0.0, 16.0 * M_PI), fg(0.0, 16.0 * M_PI);
 	ftype dx = (ab.second - ab.first) / (ftype)Nx, dy = (cd.second - cd.first) / (ftype)Ny, dz = (fg.second - fg.first) / (ftype)Nz;
 
 	ftype dt_x = dt / (dx), dt_y = dt / (dy), dt_z = dt / (dz);
-	ftype _1dx = (ftype)1.0 / dx, _1dy = (ftype)1.0 / dy, _1dz = (ftype)1.0 / dz;
+	ftypePML _1dx = (ftypePML)1.0 / dx, _1dy = (ftypePML)1.0 / dy, _1dz = (ftypePML)1.0 / dz;
 	vector<double> vec_energy(Nt + 1);
 
 	Direction direction = x_comp_yz;
 
-	//Initializing_FDTD_3_dimen_Gauss_PML<ftype>(cube, Nx, Ny, Nz, delta, dx, dy, dz, dt, delta + 1, direction, ab, cd, fg);
-	Initializing_cube_split_3_dimen_PML<ftype>(cube_split, Nx, Ny, Nz, delta);
-	Initializing_Sigma_3_dimen_PML<ftype>(Sigma, Nx, Ny, Nz, dx, dy, dz, delta, n, R);
-	Initializing_Coeff_3_dimen_PML<ftype>(Coeff, Sigma, Nx, Ny, Nz, delta, dt);
+	// Initializing_FDTD_3_dimen_Gauss_PML<ftype>(cube, Nx, Ny, Nz, delta, dx, dy, dz, dt, delta + 1, direction, ab, cd, fg);
+	Initializing_cube_split_3_dimen_PML<ftypePML>(cube_split, Nx, Ny, Nz, delta);
+	Initializing_Sigma_3_dimen_PML<ftypePML>(Sigma, Nx, Ny, Nz, delta, n, sigma_x, sigma_y);
+	Initializing_Coeff_3_dimen_PML<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta, dt);
 
-
+	// Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 0.csv");
 
 	if (type_sum == "Kahan")
 	{
 	}
 	else
 	{
-		vec_energy[0] = CalculateEnergyPML_3dimen(cube, Nx, Ny, Nz, delta);
+
 		for (int it = 0; it < Nt; it++)
 		{
-			if (it % 500 == 0)
+			if (it % 1000 == 0)
 				cout << it << endl;
-			if(it== 2500)
-				Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction);
-
+			//if(it== (int)(Nt*0.25))
+			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 1.csv");
+			//if (it == (int)(Nt * 0.5))
+			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 2.csv");
+			//if (it == (int)(Nt * 0.75))
+			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 3.csv");
+			//if (it == 2188)
+			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 3-5.csv");
+			
 			 Add_Currents_3_dimen<ftype>(cube, Nx, Ny, Nz, delta, dx, dy, dz, dt, it, delta + 1, direction, ab, cd, fg);
+			 vec_energy[0] = CalculateEnergyPML_3dimen(cube, Nx, Ny, Nz, delta);
 
 #pragma omp parallel for collapse(3)
 			for (int i = 1; i < Nx + 2 * delta + 1; i++)
@@ -460,7 +478,7 @@ double FDTD_three_dimen_with_PML(int Nx, int Ny, int Nz, ftype T, ftype dt, int 
 							Update_electric_field_three_dimen<ftype>(cube, dt_x, dt_y, dt_z, i, j, k);
 						}
 						else {
-							Update_electric_field_three_dimen_PML<ftype>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+							Update_electric_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
 
@@ -474,24 +492,28 @@ double FDTD_three_dimen_with_PML(int Nx, int Ny, int Nz, ftype T, ftype dt, int 
 							Update_magnetic_field_three_dimen<ftype>(cube, dt_x, dt_y, dt_z, i, j, k);
 						}
 						else {
-							Update_magnetic_field_three_dimen_PML<ftype>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+							Update_magnetic_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
 			vec_energy[it + 1] = CalculateEnergyPML_3dimen(cube, Nx, Ny, Nz, delta);
 		}
 	}
-	cout << endl << vec_energy[Nt] / vec_energy[2500] << endl;
+
+	double result = vec_energy[Nt] / vec_energy[2512];
+
+	cout << endl << result << endl;
+	// Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 4.csv");
 
 	//����� ������� ������� � ����
-	ofstream numb_energy("Energy_graph_with_PML_3dimen_3.csv");
-	for (int s = 0; s < Nt; s++)
-	{
-		numb_energy << dt * (double)(s + 1) << ";" << vec_energy[s] << endl;
-	}
-	numb_energy << endl << endl;
-	numb_energy.close();
+	//ofstream numb_energy(name_file);
+	//for (int s = 0; s < Nt; s++)
+	//{
+	//	numb_energy << dt * (double)(s + 1) << ";" << vec_energy[s] << endl;
+	//}
+	//numb_energy << endl << endl;
+	//numb_energy.close();
 
-	return 0.0;
+	return result;
 }
 
 template <class ftype>
@@ -503,18 +525,22 @@ double CalculateEnergyPML_3dimen(vector<vector<vector<Component<ftype>>>>& cube,
 		for (int j =  1; j < Ny + 2 * delta + 1; j++)
 			for (int k = 1; k < Nz + 2 * delta + 1; k++)
 			{
-				energy += cube[i][j][k].Ex * cube[i][j][k].Ex + cube[i][j][k].Ey * cube[i][j][k].Ey + cube[i][j][k].Ez * cube[i][j][k].Ez;
-				energy += cube[i][j][k].Bx * cube[i][j][k].Bx + cube[i][j][k].By * cube[i][j][k].By + cube[i][j][k].Bz * cube[i][j][k].Bz;
+				energy += (double)cube[i][j][k].Ex * (double)cube[i][j][k].Ex
+					+ (double)cube[i][j][k].Ey * (double)cube[i][j][k].Ey
+					+ (double)cube[i][j][k].Ez * (double)cube[i][j][k].Ez;
+				energy += (double)cube[i][j][k].Bx * (double)cube[i][j][k].Bx
+					+ (double)cube[i][j][k].By * (double)cube[i][j][k].By
+					+ (double)cube[i][j][k].Bz * (double)cube[i][j][k].Bz;
 			}
 	return energy;
 }
 
 template <class ftype>
-void Graph_Solution_in_two_planes_3dimen(vector< vector<vector<Component<ftype>>>>& cube, int Nx, int Ny, int Nz, int delta, ftype dx, ftype dy, ftype dz, Direction direction)
+void Graph_Solution_in_two_planes_3dimen(vector< vector<vector<Component<ftype>>>>& cube, int Nx, int Ny, int Nz, int delta, ftype dx, ftype dy, ftype dz, Direction direction, string file_name)
 {
 	ofstream numbEx("graph_solution_E_x.csv"), numbBx("graph_solution_B_x.csv");
 	ofstream numbEy("graph_solution_E_y.csv"), numbBy("graph_solution_B_y.csv");
-	ofstream numbEz("graph_solution_E_z.csv"), numbBz("graph_solution_B_z.csv");
+	ofstream numbEz("graph_solution_E_z.csv"), numbBz(file_name);
 
 	numbEx << direction << ";" << "y" << endl;
 	numbEx << "x" << ";" << ";";
@@ -539,33 +565,27 @@ void Graph_Solution_in_two_planes_3dimen(vector< vector<vector<Component<ftype>>
 	}
 	numbEx << endl; 		numbBx << endl;	numbEy << endl; 		numbBy << endl;	numbEz << endl; 		numbBz << endl;
 	ftype z0 = 8.0 * M_PI;
-	switch (direction)
+
+	for (int i = 1; i < Ny + 2 * delta + 1; i++)
 	{
-	case x_comp_yz:
-	{
-		for (int i = 1; i < Ny + 2 * delta + 1; i++)
+		ftype y = dy * (ftype)i;
+		numbEx << ";" << y << ";"; 			numbBx << ";" << y << ";";			numbEy << ";" << y << ";"; 			numbBy << ";" << y << ";";
+		numbEz << ";" << y << ";"; 			numbBz << ";" << y << ";";
+
+		for (int j = 1; j < Nx + 2 * delta + 1; j++)
 		{
-			ftype y = dy * (ftype)i;
-			numbEx << ";" << y << ";"; 			numbBx << ";" << y << ";";			numbEy << ";" << y << ";"; 			numbBy << ";" << y << ";";
-			numbEz << ";" << y << ";"; 			numbBz << ";" << y << ";";
-
-			for (int j = 1; j < Nx + 2 * delta + 1; j++)
-			{
-				numbEx << cube[j][i][Nz/2 + delta].Ex << ";";
-				numbBx << cube[j][i][Nz/2 + delta].Bx << ";";
-				numbEy << cube[j][i][Nz / 2 + delta].Ey << ";";
-				numbBy << cube[j][i][Nz / 2 + delta].By << ";";
-				numbEz << cube[j][i][Nz / 2 + delta].Ez << ";";
-				numbBz << cube[j][i][Nz / 2 + delta].Bz << ";";
-			}
-			numbEx << endl; 			numbBx << endl;			numbEy << endl; 			numbBy << endl;
-			numbEz << endl; 			numbBz << endl;
-
+			numbEx << cube[j][i][Nz / 2 + delta].Ex << ";";
+			numbBx << cube[j][i][Nz / 2 + delta].Bx << ";";
+			numbEy << cube[j][i][Nz / 2 + delta].Ey << ";";
+			numbBy << cube[j][i][Nz / 2 + delta].By << ";";
+			numbEz << cube[j][i][Nz / 2 + delta].Ez << ";";
+			numbBz << cube[j][i][Nz / 2 + delta].Bz << ";";
 		}
-		break;
-	}
+		numbEx << endl; 			numbBx << endl;			numbEy << endl; 			numbBy << endl;
+		numbEz << endl; 			numbBz << endl;
 
 	}
+
 	numbEx.close();
 	numbBx.close();
 	numbEy.close();
