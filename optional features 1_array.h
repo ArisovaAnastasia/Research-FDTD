@@ -1,25 +1,27 @@
 ﻿#define _USE_MATH_DEFINES
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <clocale>
 #include <vector>
 #include <cmath>
 #include "half.hpp"
+#include "type data.h"
 
 using namespace std;
 
 template <class ftypePML>
-void Graph_for_Sigma_three_dimen(data3d<SIGMA<double>>& Sigma, int Nx, int Ny, int Nz, int delta, ftypePML dx, string file_sigma)
+void Graph_for_Sigma_three_dimen(data3d<SIGMA<double>>& Sigma, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z, ftypePML dx, string file_sigma)
 {
 	//����� ������� ���� � ����
 	ofstream numb_sigma(file_sigma);
 
 	numb_sigma << ";" << "value sigma_x" << endl;
 
-	for (int s = 1; s < Nx + 2 * delta + 1; s++)
+	for (int s = 1; s < Nx + 2 * delta_x + 1; s++)
 	{
-		numb_sigma << dx * (ftypePML)(s - 1) << ";" << Sigma(s, delta / 2, delta / 2).sigmaH_x << endl;
-		numb_sigma << dx * ((ftypePML)(s - 1) + 0.5) << ";" << Sigma(s, delta / 2, delta / 2).sigmaE_x << endl;
+		numb_sigma << dx * (ftypePML)(s - 1) << ";" << Sigma(s, delta_y / 2, delta_z / 2 +1).sigmaH_x << endl;
+		numb_sigma << dx * ((ftypePML)(s - 1) + 0.5) << ";" << Sigma(s, delta_y / 2, delta_z / 2+1).sigmaE_x << endl;
 	}
 	numb_sigma << endl << endl;
 
@@ -36,7 +38,7 @@ void Graph_for_Coeff_three_dimen(data3d<COEFF<ftypePML>>& Coeff, int Nx, int Ny,
 
 	for (int s = 1; s < Nx + 2 * delta + 1; s++)
 	{
-		numb_sigma << dx * (ftypePML)(s - 1) << ";" << std::setprecision(16) << Coeff(s, delta / 2, delta / 2).Bzx1 << ";;";
+		numb_sigma << dx * (ftypePML)(s - 1) << ";" << setprecision(16) << Coeff(s, delta / 2, delta / 2).Bzx1 << ";;";
 		numb_sigma << dx * (ftypePML)(s - 1) << ";" << std::setprecision(16) << Coeff(s, delta / 2, delta / 2).Bzx2 << endl;
 	}
 	numb_sigma << endl << endl;
