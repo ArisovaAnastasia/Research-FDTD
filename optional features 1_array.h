@@ -1,4 +1,5 @@
-﻿#define _USE_MATH_DEFINES
+﻿#pragma once
+#define _USE_MATH_DEFINES
 #include <algorithm>
 #include <fstream>
 #include <iomanip>
@@ -106,6 +107,67 @@ double MaxValueElectric(data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz, 
 				sum = max(sum, abs((double)cube(i, j, k).Ex));
 				sum = max(sum, abs((double)cube(i, j, k).Ey));
 				sum = max(sum, abs((double)cube(i, j, k).Ez));
+			}
+	return sum;
+}
+template <class ftype>
+double MaxValueCurrents(data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
+{
+	double sum = DBL_MIN;
+
+	for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
+			{
+				sum = max(sum, (double)cube(i, j, k).Jx);
+				sum = max(sum, (double)cube(i, j, k).Jy);
+				sum = max(sum, (double)cube(i, j, k).Jz);
+			}
+	return sum;
+}
+
+template <class ftype>
+double MaxValueNe(data3d<ftype>& Ne, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
+{
+	double sum = DBL_MIN;
+
+	for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
+			{
+				sum = max(sum, (double)Ne(i, j, k));
+				sum = max(sum, (double)Ne(i, j, k));
+				sum = max(sum, (double)Ne(i, j, k));
+			}
+	return sum;
+}
+
+template <class ftype>
+double MinValueCurrents(data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
+{
+	double sum = DBL_MAX;
+
+	for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
+			{
+				sum = min(sum, (double)cube(i, j, k).Jx);
+				sum = min(sum, (double)cube(i, j, k).Jy);
+				sum = min(sum, (double)cube(i, j, k).Jz);
+			}
+	return sum;
+}
+
+template <class ftype>
+double MaxValueElectricModule(data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
+{
+	double sum = DBL_MIN;
+
+	for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
+			{
+				sum = max(sum, abs((double)moduleE(cube, i, j, k)));
 			}
 	return sum;
 }

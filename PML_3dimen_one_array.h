@@ -200,9 +200,9 @@ void Initializing_Sigma_3_dimen_PML(data3d<SIGMA<ftypePML>>& Sigma, int Nx, int 
 	ftypePML var_Sigma_max_y = sigma_y;
 	ftypePML var_Sigma_max_z = sigma_y;
 
-	cout << "delta_x= "<< delta_x << "  delta_y= " << delta_y << "   delta_z= " << delta_z << "    " << endl;
-	cout << "Nx= " << Nx << "  Ny= " << Ny << "   Nz= " << Nz << "    " << endl;
-	cout << "n = " << n << endl;
+	//cout << "delta_x= "<< delta_x << "  delta_y= " << delta_y << "   delta_z= " << delta_z << "    " << endl;
+	//cout << "Nx= " << Nx << "  Ny= " << Ny << "   Nz= " << Nz << "    " << endl;
+	//cout << "n = " << n << endl;
 	cout << var_Sigma_max_x << "  " << var_Sigma_max_y << "   " << var_Sigma_max_z << "    " << endl;
 	
 	//cout << func_R(n, var_Sigma_max_x, delta, dx) << endl;
@@ -305,9 +305,9 @@ void Initializing_Coeff_3_dimen_PML_old(data3d<COEFF<ftypePML>>& Coeff, data3d<S
 
 }
 
-template <class ftypePML>
+template <class ftypePML, class ftype = double>
 void Initializing_Coeff_3_dimen_PML_correct(data3d<COEFF<ftypePML>>& Coeff, data3d<SIGMA<double>>& Sigma, int Nx, int Ny, int Nz,
-	int delta_x, int delta_y, int delta_z, ftypePML dt) {
+	int delta_x, int delta_y, int delta_z, ftype dt) {
 
 	double Exy1, Exz1, Ezx1, Ezy1, Eyx1, Eyz1;
 	double Bxy1, Bxz1, Bzx1, Bzy1, Byx1, Byz1;
@@ -567,7 +567,7 @@ void Add_Currents_3_dimen(data3d<Component<ftype>>& cube,
 }
 
 template <class ftype, class ftypePML>
-double FDTD_three_dimen_with_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt, int delta_x, int delta_y, int delta_z, double sigma_x, double sigma_y,
+double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt, int delta_x, int delta_y, int delta_z, double sigma_x, double sigma_y,
 	string type_sum, string file_energy, string file_data, string file_sigma)
 {
 	setlocale(LC_ALL, "Russian");
@@ -603,7 +603,7 @@ double FDTD_three_dimen_with_PML_one_array(double n, int Nx, int Ny, int Nz, fty
 	Initializing_cube_split_3_dimen_PML<ftypePML>(cube_split, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 	Initializing_Sigma_3_dimen_PML<double>(Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, n, sigma_x, sigma_y);
 	
-	Initializing_Coeff_3_dimen_PML_correct_2_0<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
+	Initializing_Coeff_3_dimen_PML_correct<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
 
 	//Graph_for_Sigma_three_dimen<ftypePML>(Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dx, file_sigma);
 
@@ -649,6 +649,8 @@ double FDTD_three_dimen_with_PML_one_array(double n, int Nx, int Ny, int Nz, fty
 
 	if (type_sum == "Kahan")
 	{
+		Initializing_Coeff_3_dimen_PML_correct_2_0<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
+
 		cout << type_sum << endl;
 		for (int it = 0; it < Nt; it++)
 		{
@@ -735,6 +737,8 @@ double FDTD_three_dimen_with_PML_one_array(double n, int Nx, int Ny, int Nz, fty
 	}
 	else
 	{
+		Initializing_Coeff_3_dimen_PML_correct<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
+
 		cout << type_sum << endl;
 		for (int it = 0; it < Nt; it++)
 		{
@@ -767,7 +771,7 @@ double FDTD_three_dimen_with_PML_one_array(double n, int Nx, int Ny, int Nz, fty
 							Update_electric_field_three_dimen<ftype>(cube, dt_x, dt_y, dt_z, i, j, k);
 						}
 						else {
-							Update_electric_field_three_dimen_PML_2_0<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+							Update_electric_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
 
@@ -781,7 +785,7 @@ double FDTD_three_dimen_with_PML_one_array(double n, int Nx, int Ny, int Nz, fty
 							Update_magnetic_field_three_dimen<ftype>(cube, dt_x, dt_y, dt_z, i, j, k);
 						}
 						else {
-							Update_magnetic_field_three_dimen_PML_2_0<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+							Update_magnetic_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
 			
