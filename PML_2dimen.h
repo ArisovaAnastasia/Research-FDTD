@@ -7,66 +7,51 @@
 #include <vector>
 #include <cmath>
 #include <omp.h>
+#include "type data.h"
 
 using namespace std;
-enum Direction {
-	x_comp_yz, x_comp_zy, y_comp_xz, y_comp_zx, z_comp_xy, z_comp_yx,
-};
-template <class ftype>
-class SIGMA
-{
-public:
-	ftype sigmaE_x, sigmaE_y, sigmaE_z, sigmaH_x, sigmaH_y, sigmaH_z;
-};
 
-template <class ftype>
-class COEFF
-{
-public:
-	ftype Exy1, Exz1, Eyx1, Eyz1, Ezx1, Ezy1, Bxy1, Bxz1, Byx1, Byz1, Bzx1, Bzy1,
-		Exy2, Exz2, Eyx2, Eyz2, Ezx2, Ezy2, Bxy2, Bxz2, Byx2, Byz2, Bzx2, Bzy2;
-};
-
-template <class ftype>
-class ComponentSplit
-{
-public:
-	ftype Exy, Exz, Eyx, Eyz, Ezx, Ezy,
-		Bxy, Bxz, Byx, Byz, Bzx, Bzy;
-};
 
 // #define R 1.0e-8
 
-template <class ftype>
-ftype Sigma_max(int n, double R, int delta, ftype step)
+template <class ftypePML>
+ftypePML Sigma_max(int n, ftypePML R, int delta, ftypePML step)
 {
-	return -(ftype)(n + 1)*(ftype)log ((ftype)R)/(2.0 * (ftype)delta * step);
+	return -(ftypePML)(n + 1) * (ftypePML)log((ftypePML)R) / (2.0 * (ftypePML)delta * step);
 }
 
-template <class ftype>
-ftype distanceH(int N, int delta, int i)
+template <class ftypePML>
+ftypePML distanceH(int N, int delta, int i)
 {
-	ftype dist = 0.0;
+	ftypePML dist = 0.0;
+
+	if (delta == 0)
+		return 0.0;
+
 	if (i < delta + 1)
-		dist = (ftype)(delta + 1 - i);
-
-	if(i > N +  delta)
-		dist = (ftype)(i - delta - N) - (ftype)0.5;
-
-	return dist / (ftype)delta;
-}
-
-template <class ftype>
-ftype distanceE(int N, int delta, int i)
-{ //���� ���������� ������������ PML-����
-	ftype dist = 0.0;
-	if (i < delta + 1)
-		dist = (ftype)(delta + 1 - i) - (ftype)0.5;
+		dist = (ftypePML)(delta + 1 - i);
 
 	if (i > N + delta)
-		dist = (ftype)(i - delta - N);
+		dist = (ftypePML)(i - delta - N) - (ftypePML)0.5;
 
-	return dist / (ftype)delta;
+	return dist / (ftypePML)delta;
+}
+
+template <class ftypePML>
+ftypePML distanceE(int N, int delta, int i)
+{ //���� ���������� ������������ PML-����
+	ftypePML dist = 0.0;
+
+	if (delta == 0)
+		return 0.0;
+
+	if (i < delta + 1)
+		dist = (ftypePML)(delta + 1 - i) - (ftypePML)0.5;
+
+	if (i > N + delta)
+		dist = (ftypePML)(i - delta - N);
+
+	return dist / (ftypePML)delta;
 }
 
 template <class ftype>
@@ -591,7 +576,7 @@ double CalculateEnergyPML_2dimen(vector<vector<Component<ftype>>>& cube, int Nx,
 }
 
 template <class ftype>
-void Graph_for_Sigma(vector<vector<SIGMA<ftype>>>& Sigma, int Nx, int Ny, int delta, ftype dx, ftype dy, int fix_index)
+void Graph_for_Sigma_two_dimen(vector<vector<SIGMA<ftype>>>& Sigma, int Nx, int Ny, int delta, ftype dx, ftype dy, int fix_index)
 {
 	//����� ������� ���� � ����
 	ofstream numb_sigma("Sigma_graph_1.csv");

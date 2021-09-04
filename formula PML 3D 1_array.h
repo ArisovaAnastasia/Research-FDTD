@@ -22,6 +22,7 @@ public:
 		return data[l * (m + 2 * delta_y + 2) * (n + 2 * delta_x + 2) + j * (n + 2 * delta_x + 2) + i];
 	}
 };
+
 template <class ftypePML>
 ftypePML distanceH(int N, int delta, int i)
 {
@@ -55,7 +56,6 @@ ftypePML distanceE(int N, int delta, int i)
 
 	return dist / (ftypePML)delta;
 }
-
 
 template <class type>
 type Kahan(type a, type b, type ca, type cb)
@@ -398,8 +398,10 @@ void Update_electric_field_three_dimen(data3d<Component<ftype>>& cube,
 
 	tEx = (cube(i, j + 1, k).Bz - cube(i, j, k).Bz) * (dt_y)
 		-(cube(i, j, k + 1).By - cube(i, j, k).By) * (dt_z)+cube(i, j, k).Ex;
+
 	tEy = (cube(i, j, k + 1).Bx - cube(i, j, k).Bx) * (dt_z)
 		-(cube(i + 1, j, k).Bz - cube(i, j, k).Bz) * (dt_x)+cube(i, j, k).Ey;
+
 	tEz = (cube(i + 1, j, k).By - cube(i, j, k).By) * (dt_x)
 		-(cube(i, j + 1, k).Bx - cube(i, j, k).Bx) * (dt_y)+cube(i, j, k).Ez;
 
@@ -419,6 +421,7 @@ void Update_magnetic_field_three_dimen(data3d<Component<ftype>>& cube,
 
 	tBy = -(cube(i, j, k).Ex - cube(i, j, k - 1).Ex) * (dt_z)
 		+(cube(i, j, k).Ez - cube(i - 1, j, k).Ez) * (dt_x)+cube(i, j, k).By;
+
 	tBz = -(cube(i, j, k).Ey - cube(i - 1, j, k).Ey) * (dt_x)
 		+(cube(i, j, k).Ex - cube(i, j - 1, k).Ex) * (dt_y)+cube(i, j, k).Bz;
 

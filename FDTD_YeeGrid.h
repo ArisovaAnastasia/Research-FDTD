@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include <omp.h>
+#include "half.hpp"
 
 using namespace std;
 
@@ -464,11 +465,11 @@ void Check_error_current_step_electric_task1(vector<vector<vector<Component<ftyp
 	//	rel_err_t = max(rel_err_t, abs(sin(y2 - t) - (double)cube2[i][j][k].Bx) / abs(sin(y - t)));
 	//}
 
-	////Считаем текущую ошибку smape в данном узле
-	//double temp;
-	//temp = (double)2 * abs((double)sin(y2 - t) - (double)cube2[i][j][k].Bx) /
-	//	(abs((double)sin(y2 - t)) + abs((double)cube2[i][j][k].Bx));
-	//smape_err_t += temp;
+	//Считаем текущую ошибку smape в данном узле
+	double temp;
+	temp = (double)2 * abs((double)sin(x1 - t1) - (double)cube2[i][j][k].Ey) /
+		(abs((double)sin(x1 - t1)) + abs((double)cube2[i][j][k].Ey));
+	smape_err_t += temp;
 }
 
 template <class ftype>
@@ -487,11 +488,11 @@ void Check_error_current_step_magnetic_task1(vector<vector<vector<Component<ftyp
 	//	rel_err_t = max(rel_err_t, abs(sin(y2 - t) - (double)cube2[i][j][k].Bx) / abs(sin(y - t)));
 	//}
 
-	////Считаем текущую ошибку smape в данном узле
-	//double temp;
-	//temp = (double)2 * abs((double)sin(y2 - t) - (double)cube2[i][j][k].Bx) /
-	//	(abs((double)sin(y2 - t)) + abs((double)cube2[i][j][k].Bx));
-	//smape_err_t += temp;
+	//Считаем текущую ошибку smape в данном узле
+	double temp;
+	temp = (double)2 * abs((double)sin(x2 - t2) - (double)cube2[i][j][k].Bz) /
+		(abs((double)sin(x2 - t2)) + abs((double)cube2[i][j][k].Bz));
+	smape_err_t += temp;
 }
 
 template <class ftype>
@@ -798,6 +799,7 @@ double FDTD_three_dimen_print_to_file_task1(int Nx, int Ny, int Nz, ftype T, fty
 
 	Initializing_FDTD_three_dimen_task1<ftype>(cube, Nx, Ny, Nz, dx, dt, ab, abs_err_t, rel_err_t, smape_err_t);
 	vec_abs_err[0] = abs_err_t;
+	vec_smape_err[0] = abs_err_t;
 	vec_value[0] = cube[0][0][0].Ey;
 	if (type_sum == "Kahan")
 	{
@@ -806,7 +808,7 @@ double FDTD_three_dimen_print_to_file_task1(int Nx, int Ny, int Nz, ftype T, fty
 	{
 		for (int it = 0; it < Nt; it++)
 		{
-			if (it % 100 == 0)
+			if (it % 1000 == 0)
 				cout << it << endl;
 			abs_err_t = 0.0; rel_err_t = 0.0; smape_err_t = 0.0;
 
@@ -903,7 +905,7 @@ double FDTD_three_dimen_print_to_file_task1(int Nx, int Ny, int Nz, ftype T, fty
 	numb1 << "Nt = " << (int)(T / dt) << endl << endl;
 	for (int s = 0; s < Nt + 1; s++)
 	{
-		numb1 << dt * (double)(s) << ";" << vec_abs_err[s] << endl;
+		numb1 << dt * (double)(s) << ";" << vec_abs_err[s] << ";" << ";" << dt * (double)(s) << ";" << vec_smape_err[s] << endl;
 	}
 	numb1 << endl << endl;
 	numb1.close();
@@ -918,7 +920,7 @@ double FDTD_three_dimen_print_to_file_task1(int Nx, int Ny, int Nz, ftype T, fty
 	//numb_value.close();
 
 	//вывод вектора энергии в файл
-	ofstream numb_energy("Energy_graph_1.csv");
+	ofstream numb_energy("Energy_graph_without_PML.csv");
 	for (int s = 0; s < Nt; s++)
 	{
 		numb_energy << dt * (double)(s + 1) << ";" << vec_energy[s]  << endl;

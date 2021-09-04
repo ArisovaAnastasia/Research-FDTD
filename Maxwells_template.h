@@ -7,15 +7,10 @@
 #include <vector>
 #include <cmath>
 #include <omp.h>
+#include "type data.h"
 
 using namespace std;
 
-template <class ftype>
-class Component
-{
-public:
-	ftype Ex, Ey, Ez, Bx, By, Bz;
-};
 
 template <class ftype>
 void Initializing_the_cube_central(vector<vector<vector<Component<ftype>>>>& cube, long long int _N, ftype _dx,

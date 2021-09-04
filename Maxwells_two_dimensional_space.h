@@ -7,6 +7,7 @@
 #include <vector>
 #include <cmath>
 #include <omp.h>
+#include "type data.h"
 
 using namespace std;
 

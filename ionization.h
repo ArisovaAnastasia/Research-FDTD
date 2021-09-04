@@ -264,7 +264,7 @@ double Ionization(double n, int Nx, int Ny, int Nz, int Nt, ftype dt, ftype dx, 
 							Update_electric_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
-			cout << "electric = " << MaxValueElectricModule(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z) << endl;
+			//cout << "electric = " << MaxValueElectricModule(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z) << endl;
 			//cout << "  max value = " << MaxValueCurrents(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 			
 			//cout << "  min value = " << MinValueCurrents(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);

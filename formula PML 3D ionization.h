@@ -7,7 +7,7 @@
 #define w 2.35e15 //c^-1
 #define t_0 3.33333e-15 //c
 #define w_a 4.13e16 // c^-1
-#define Ng 0.016
+#define Ng 0.8
 
 using namespace std;
 

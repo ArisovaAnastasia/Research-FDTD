@@ -774,7 +774,7 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 							Update_electric_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
-
+			//q.wait//q.wait_and_throw
 #pragma omp parallel for collapse(3)
 			for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
 				for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
@@ -788,7 +788,7 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 							Update_magnetic_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
-			
+			//q.wait//q.wait_and_throw
 
 			//vec_average_dataE[it + 1] = AverageValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 			//vec_average_dataB[it + 1] = AverageValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);

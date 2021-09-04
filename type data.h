@@ -4,8 +4,9 @@ template <class ftype>
 class Component
 {
 public:
-	ftype Ex, Ey, Ez, Bx, By, Bz;
+	ftype Ex, Ey, Ez, Bx, By, Bz, Jx, Jy, Jz;
 };
+
 template <class ftypePML>
 class SIGMA
 {
