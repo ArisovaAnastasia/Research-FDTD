@@ -82,14 +82,13 @@ int main() {
 	double R1 = 2.67169e-3; // значение R для опт сигмы = 18,86 при T=14pi
 	double R2 = 4.52533e-7; // значение R для опт сигмы = 46.5 при T=8pi
 
-	double T = 8. * M_PI;
+	double T = 8.0 * M_PI;
 	int delta_x = 8, delta_y = 8, delta_z = 0;
 	int Nx = 128, Ny = 16, Nz = 1;
 
-	FDTD_3D_PML_one_array<half, half>(n, Nx, Ny, Nz, (half)T, 0.005_h,
+	FDTD_3D_PML_one_array<float, float>(n, Nx, Ny, Nz, (float)T, 0.005_h,
 		delta_x, delta_y, delta_z, 46.5, 46.5, "No Kahan", ".csv", ".csv", ".csv");
-	FDTD_3D_PML_one_array<half, half>(n, Nx, Ny, Nz, (half)T, 0.005_h,
-		delta_x, delta_y, delta_z, 46.5, 46.5, "Kahan", ".csv", ".csv", ".csv");
+	//FDTD_3D_PML_one_array<half, half>(n, Nx, Ny, Nz, (half)T, 0.005_h, delta_x, delta_y, delta_z, 46.5, 46.5, "Kahan", ".csv", ".csv", ".csv");
 
 	//double sigma = 20.0;
 

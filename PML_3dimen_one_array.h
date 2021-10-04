@@ -646,12 +646,14 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 
 	 double t1, t2;
 	 t1 = omp_get_wtime();
+	 auto start = std::chrono::steady_clock::now();
 
 	if (type_sum == "Kahan")
 	{
 		Initializing_Coeff_3_dimen_PML_correct_2_0<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
 
 		cout << type_sum << endl;
+
 		for (int it = 0; it < Nt; it++)
 		{
 			//if (it % 1000 == 0) cout << it << endl;
@@ -740,7 +742,9 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 		Initializing_Coeff_3_dimen_PML_correct<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
 
 		cout << type_sum << endl;
-		for (int it = 0; it < Nt; it++)
+			
+
+		for (int it = 0; it < Nt; ++it)
 		{
 			if (it % 1000 == 0)
 				cout << it << endl;
@@ -762,9 +766,9 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 			 //vec_max_dataB[0] = MaxValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 
 #pragma omp parallel for collapse(3)
-			for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
-				for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
-					for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
+			for (int i = 1; i < Nx + 2 * delta_x + 1; ++i)
+				for (int j = 1; j < Ny + 2 * delta_y + 1; ++j)
+					for (int k = 1; k < Nz + 2 * delta_z + 1; ++k)
 					{
 						if ((i >= delta_x + 1) && (i < Nx + delta_x + 1)&& (j >= delta_y + 1) && (j < Ny + delta_y + 1) && (k >= delta_z + 1) && (k < Nz + delta_z + 1))
 						{
@@ -776,9 +780,9 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 					}
 			//q.wait//q.wait_and_throw
 #pragma omp parallel for collapse(3)
-			for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
-				for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
-					for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
+			for (int i = 1; i < Nx + 2 * delta_x + 1; ++i)
+				for (int j = 1; j < Ny + 2 * delta_y + 1; ++j)
+					for (int k = 1; k < Nz + 2 * delta_z + 1; ++k)
 					{
 						if ((i >= delta_x + 1) && (i < Nx + delta_x + 1) && (j >= delta_y + 1) && (j < Ny + delta_y + 1) && (k >= delta_z + 1) && (k < Nz + delta_z + 1))
 						{
@@ -795,15 +799,18 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 			//vec_max_dataE[it + 1] = MaxValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 			//vec_max_dataB[it + 1] = MaxValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 		}
+		
 	}
-
+	auto end = std::chrono::steady_clock::now();
 	t2 = omp_get_wtime();
+
+	std::chrono::duration<double> elapsed_seconds = end - start;
 
 
 	vec_energy[Nt] = CalculateEnergyPML_3dimen(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 	vec_energy_acc[Nt] = CalculateEnergyPML_3dimen_accurate(cube, compensator, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 
-	double result = vec_energy[Nt] / vec_energy[2512];
+	double result = vec_energy[Nt] / vec_energy[Nt/2];
 
 	//vec_average_dataE[Nt] = AverageValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 	//vec_average_dataB[Nt] = AverageValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
@@ -811,13 +818,12 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 	//vec_max_dataB[Nt] = MaxValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 
 
-	// Graph_Solution_in_one_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction);
+	Graph_Solution_two_planes_3d_python<ftype>(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z, dx, dy, dz, dt, T,
+		n, "Ey_3d_ff_OpenMP.csv", "Bz_3d_ff_OpenMP.csv");
 
-	cout << "Reflection coefficient = "<< endl << vec_energy[Nt] / vec_energy[2512] << endl << "Accurate reflection coefficient = " << endl << vec_energy_acc[Nt] / vec_energy_acc[2512] << endl << endl;
-	cout << "time = " << t2 - t1 << endl << endl;
+	std::cout << "reflection coefficient = " << result << "\n";
+	std::cout << "elapsed time = " << elapsed_seconds.count() << "\n";
 
-	// Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 4.csv");
-	// Graph_Solution_in_one_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction);
 
 	//����� ������� ������� � ����
 
@@ -858,7 +864,6 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 	//	numb_charact << dt * (double)(s) << ";" << vec_max_dataE[s] << ";" << ";" << dt * (double)(s) << ";" << vec_max_dataB[s]<<";;;";
 	//	numb_charact << dt * (double)(s) << ";" << vec_average_dataE[s] << ";" << ";" << dt * (double)(s) << ";" << vec_average_dataB[s];
 	//	numb_charact << endl;
-
 	//}
 	//numb_charact.close();
 

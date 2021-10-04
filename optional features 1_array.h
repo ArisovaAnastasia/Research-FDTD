@@ -293,3 +293,40 @@ void Graph_Solution_in_one_planes_3dimen(data3d<Component<ftype>>& cube, int Nx,
 	numbBz.close();
 }
 
+template <class ftype>
+void Graph_Solution_two_planes_3d_python (data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz,
+	int delta_x, int delta_y, int delta_z, ftype dx, ftype dy, ftype dz, ftype dt, ftype T,
+	int n, string file_name1, string file_name2)
+{
+	ofstream numbEy(file_name1), numbBz(file_name2);
+
+	numbEy << Nx + 2 * delta_x << ";" << Ny + 2 * delta_y << std::endl;
+	numbBz << Nx + 2 * delta_x << ";" << Ny + 2 * delta_y << std::endl;
+
+	for (int i = 1; i < Ny + 2 * delta_y + 1; i++)
+	{
+		ftype y = dy * (ftype)i;
+
+		for (int j = 1; j < Nx + 2 * delta_x + 1; j++)
+		{
+			numbEy << cube(j, i, 1).Ey << ";";
+			numbBz << cube(j, i, 1).Bz << ";";
+		}
+		numbEy << endl;
+		numbBz << endl;
+
+	}
+	numbEy << "Nx = " << Nx << ";  Ny = " << Ny << ";   Nz = " << Nz << endl;
+	numbEy << "delta_x = " << delta_x << ";  delta_y = " << delta_y << ";   delta_z = " << delta_z << endl;
+	numbEy << "dx = " << dx << ";   dy = " << dy << ";   dz = " << dz << endl;
+	numbEy << "T = " << T << ";   dt = " << dt << ";   n = " << n << endl;
+
+	numbBz << "Nx = " << Nx << ";  Ny = " << Ny << ";   Nz = " << Nz << endl;
+	numbBz << "delta_x = " << delta_x << ";  delta_y = " << delta_y << ";   delta_z = " << delta_z << endl;
+	numbEy << "dx = " << dx << ";   dy = " << dy << ";   dz = " << dz << endl;
+	numbBz << "T = " << T << ";   dt = " << dt << ";   n = " << n << endl;
+
+	numbEy.close();
+	numbBz.close();
+}
+

@@ -7,16 +7,14 @@ using namespace std;
 
 template <typename type_data>
 class data3d {
-	vector<type_data> data;
+	type_data* data;
 	int n, m, k, delta_x, delta_y, delta_z;
-
 public:
 	data3d(int n, int m, int k, int delta_x, int delta_y, int delta_z) {
-		data.resize((n + 2 * delta_x + 2) * (m + 2 * delta_y + 2) * (k + 2 * delta_z + 2));
+		this->data = (type_data*)malloc((n + 2 * delta_x + 2) * (m + 2 * delta_y + 2) * (k + 2 * delta_z + 2)*sizeof(type_data));
 
 		this->n = n; this->m = m; this->k = k;
 		this->delta_x = delta_x; this->delta_y = delta_y; this->delta_z = delta_z;
-
 	}
 	inline type_data& operator()(int i, int j, int l) {
 		return data[l * (m + 2 * delta_y + 2) * (n + 2 * delta_x + 2) + j * (n + 2 * delta_x + 2) + i];
