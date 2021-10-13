@@ -1520,7 +1520,8 @@ double CalculateEnergy(vector<vector<vector<Component<ftype>>>>& cube, int Nx, i
 template <class ftype>
 void Check_Curant(ftype dx, ftype dy, ftype dz, ftype dt)
 {
-	double temp = dt * sqrt(1.0/(dx*dx) + 1.0/(dy*dy) + 1.0/(dz*dz)) ;
+	//double temp = dt * sqrt(1.0/(dx*dx) + 1.0/(dy*dy) + 1.0/(dz*dz)) ;
+	double temp = dt * sqrt(1.0 / (dx * dx) + 1.0 / (dy * dy));
 	cout << temp << " < 1  ";
 	if (temp < 1)
 		cout << "TRUE" << endl;

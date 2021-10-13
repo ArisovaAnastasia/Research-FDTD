@@ -9,6 +9,7 @@
 #include "formula PML 3D 1_array.h"
 #include "optional features 1_array.h"
 #include "type data.h"
+#include "FDTD_YeeGrid.h"
 
 using namespace std;
 using half_float::half;
@@ -210,14 +211,14 @@ void Initializing_Sigma_3_dimen_PML(data3d<SIGMA<ftypePML>>& Sigma, int Nx, int 
 	for(int i = 1; i < Nx + 2 * delta_x + 1; i++)
 		for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
 			for (int k = 1; k < Nz + 2 * delta_z + 1; k++) {
-				Sigma(i, j, k).sigmaE_x = var_Sigma_max_x * powf(distanceE<ftypePML>(Nx, delta_x, i), n);
-				Sigma(i, j, k).sigmaH_x = var_Sigma_max_x * powf(distanceH<ftypePML>(Nx, delta_x, i), n);
+				Sigma(i, j, k).sigmaE_x = var_Sigma_max_x * pow(distanceE<ftypePML>(Nx, delta_x, i), n);
+				Sigma(i, j, k).sigmaH_x = var_Sigma_max_x * pow(distanceH<ftypePML>(Nx, delta_x, i), n);
 	
-				Sigma(i, j, k).sigmaE_y = var_Sigma_max_y * powf(distanceE<ftypePML>(Ny, delta_y, j), n);
-				Sigma(i, j, k).sigmaH_y = var_Sigma_max_y * powf(distanceH<ftypePML>(Ny, delta_y, j), n);
+				Sigma(i, j, k).sigmaE_y = var_Sigma_max_y * pow(distanceE<ftypePML>(Ny, delta_y, j), n);
+				Sigma(i, j, k).sigmaH_y = var_Sigma_max_y * pow(distanceH<ftypePML>(Ny, delta_y, j), n);
 
-				Sigma(i, j, k).sigmaE_z = var_Sigma_max_z * powf(distanceE<ftypePML>(Nz, delta_z, k), n);
-				Sigma(i, j, k).sigmaH_z = var_Sigma_max_z * powf(distanceH<ftypePML>(Nz, delta_z, k), n);
+				Sigma(i, j, k).sigmaE_z = var_Sigma_max_z * pow(distanceE<ftypePML>(Nz, delta_z, k), n);
+				Sigma(i, j, k).sigmaH_z = var_Sigma_max_z * pow(distanceH<ftypePML>(Nz, delta_z, k), n);
 			}
 	//cout << sizeof(Sigma(10, 18, 11).sigmaH_x) << sizeof(double) << sizeof(float) << endl;
 }
@@ -572,7 +573,7 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 {
 	setlocale(LC_ALL, "Russian");
 
-	int Nt = T / dt;
+	int Nt = ceil(T / dt);
 	// delta  =  width boundary layer
 
 	data3d<Component<ftype>> cube(Nx, Ny, Nz, delta_x, delta_y, delta_z);
@@ -592,61 +593,19 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 	ftype dt_x = dt / (dx), dt_y = dt / (dy), dt_z = dt / (dz);
 	ftypePML _1dx = (ftypePML)1.0 / dx, _1dy = (ftypePML)1.0 / dy, _1dz = (ftypePML)1.0 / dz;
 	vector<double> vec_energy(Nt + 1), vec_energy_acc(Nt + 1);
-
-	//vector<double> vec_max_dataE(Nt + 1), vec_max_dataB(Nt + 1);
-	//vector<double> vec_average_dataE(Nt + 1), vec_average_dataB(Nt + 1);
-
-	//vector<double> vec_dataEy(Nt + 1), vec_dataBz(Nt + 1);
-
-
-	// Initializing_FDTD_3_dimen_Gauss_PML<ftype>(cube, Nx, Ny, Nz, delta, dx, dy, dz, dt, delta + 1, direction, ab, cd, fg);
+	
 	Initializing_cube_split_3_dimen_PML<ftypePML>(cube_split, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 	Initializing_Sigma_3_dimen_PML<double>(Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, n, sigma_x, sigma_y);
 	
 	Initializing_Coeff_3_dimen_PML_correct<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
+	Graph_for_Coeff_three_dimen<ftypePML>(Coeff, Nx, Ny, Nz, delta_x, dx, "Coeff.csv");
+	
 
-	//Graph_for_Sigma_three_dimen<ftypePML>(Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dx, file_sigma);
-
-//	Initializing_Coeff_3_dimen_PML_correct<half>(CoeffHalf, Sigma, Nx, Ny, Nz, delta, (half)dt);
-//	for (int i = 0; i < Nx + 2 * delta + 2; i++)
-//		for (int j = 0; j < Ny + 2 * delta + 2; j++)
-//			for (int k = 0; k < Nz + 2 * delta + 2; k++)
-//			{
-//				Coeff(i, j, k).Exy1 = ((CoeffHalf(i, j, k).Exy1));
-//				Coeff(i, j, k).Exz1 = ((CoeffHalf(i, j, k).Exz1));
-//				Coeff(i, j, k).Eyx1 = ((CoeffHalf(i, j, k).Eyx1));
-//				Coeff(i, j, k).Eyz1 = ((CoeffHalf(i, j, k).Eyz1));
-//				Coeff(i, j, k).Ezx1 = ((CoeffHalf(i, j, k).Ezx1));
-//				Coeff(i, j, k).Ezy1 = ((CoeffHalf(i, j, k).Ezy1));
-//
-//				Coeff(i, j, k).Bxy1 = ((CoeffHalf(i, j, k).Bxy1));
-//				Coeff(i, j, k).Bxz1 = ((CoeffHalf(i, j, k).Bxz1));
-//				Coeff(i, j, k).Byx1 = ((CoeffHalf(i, j, k).Byx1));
-//				Coeff(i, j, k).Byz1 = ((CoeffHalf(i, j, k).Byz1));
-//				Coeff(i, j, k).Bzx1 = ((CoeffHalf(i, j, k).Bzx1));
-//				Coeff(i, j, k).Bzy1 = ((CoeffHalf(i, j, k).Bzy1));
-//
-//				Coeff(i, j, k).Exy2 = ((CoeffHalf(i, j, k).Exy2));
-//				Coeff(i, j, k).Exz2 = ((CoeffHalf(i, j, k).Exz2));
-//				Coeff(i, j, k).Eyx2 = ((CoeffHalf(i, j, k).Eyx2));
-//				Coeff(i, j, k).Eyz2 = ((CoeffHalf(i, j, k).Eyz2));
-//				Coeff(i, j, k).Ezx2 = ((CoeffHalf(i, j, k).Ezx2));
-//				Coeff(i, j, k).Ezy2 = ((CoeffHalf(i, j, k).Ezy2));
-//
-//				Coeff(i, j, k).Bxy2 = ((CoeffHalf(i, j, k).Bxy2));
-//				Coeff(i, j, k).Bxz2 = ((CoeffHalf(i, j, k).Bxz2));
-//				Coeff(i, j, k).Byx2 = ((CoeffHalf(i, j, k).Byx2));
-//				Coeff(i, j, k).Byz2 = ((CoeffHalf(i, j, k).Byz2));
-//				Coeff(i, j, k).Bzx2 = ((CoeffHalf(i, j, k).Bzx2));
-//				Coeff(i, j, k).Bzy2 = ((CoeffHalf(i, j, k).Bzy2));
-////			}
-////		}
-//// cout << sizeof(Coeff(1, 5, 4).Bxy2) << sizeof(Coeff(2, 4, 3).Exz1) << endl;
-//			}
+	Check_Curant(dx, dy, dz, dt);
 
 	 double t1, t2;
-	 t1 = omp_get_wtime();
 	 auto start = std::chrono::steady_clock::now();
+	 cout << Nt << endl;
 
 	if (type_sum == "Kahan")
 	{
@@ -739,31 +698,21 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 	}
 	else
 	{
-		Initializing_Coeff_3_dimen_PML_correct<ftypePML>(Coeff, Sigma, Nx, Ny, Nz, delta_x, delta_y, delta_z, dt);
-
 		cout << type_sum << endl;
 			
-
 		for (int it = 0; it < Nt; ++it)
 		{
 			if (it % 1000 == 0)
 				cout << it << endl;
-			//if(it== (int)(Nt*0.25))
-			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 1.csv");
-			//if (it == (int)(Nt * 0.5))
-			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 2.csv");
-			//if (it == (int)(Nt * 0.75))
-			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 3.csv");
-			//if (it == 2188)
-			//	Graph_Solution_in_two_planes_3dimen(cube, Nx, Ny, Nz, delta, dx, dy, dz, direction, "Bz PML T=8pi 3-5.csv");
-			
+
+			if (it  == 209) {
+				Graph_Solution_two_planes_3d_python<ftype>(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z, dx, dy, dz, dt, T,
+					n, 0, "Ey_3d_dd_OpenMP_T_1_12__.csv", "Bz_3d_dd_OpenMP_T_1_12.csv");
+			}
+
 			 Add_Currents_3_dimen<ftype>(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z, dx, dy, dz, dt, it, ab, cd, fg);
 			 vec_energy[it] = CalculateEnergyPML_3dimen(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 
-			 //vec_average_dataE[0] = AverageValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-			 //vec_average_dataB[0] = AverageValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-			 //vec_max_dataE[0] = MaxValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-			 //vec_max_dataB[0] = MaxValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 
 #pragma omp parallel for collapse(3)
 			for (int i = 1; i < Nx + 2 * delta_x + 1; ++i)
@@ -773,12 +722,11 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 						if ((i >= delta_x + 1) && (i < Nx + delta_x + 1)&& (j >= delta_y + 1) && (j < Ny + delta_y + 1) && (k >= delta_z + 1) && (k < Nz + delta_z + 1))
 						{
 							Update_electric_field_three_dimen<ftype>(cube, dt_x, dt_y, dt_z, i, j, k);
-						}
-						else {
+						} else {
 							Update_electric_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
-			//q.wait//q.wait_and_throw
+
 #pragma omp parallel for collapse(3)
 			for (int i = 1; i < Nx + 2 * delta_x + 1; ++i)
 				for (int j = 1; j < Ny + 2 * delta_y + 1; ++j)
@@ -792,80 +740,25 @@ double FDTD_3D_PML_one_array(double n, int Nx, int Ny, int Nz, ftype T, ftype dt
 							Update_magnetic_field_three_dimen_PML<ftype, ftypePML>(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
 						}
 					}
-			//q.wait//q.wait_and_throw
-
-			//vec_average_dataE[it + 1] = AverageValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-			//vec_average_dataB[it + 1] = AverageValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-			//vec_max_dataE[it + 1] = MaxValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-			//vec_max_dataB[it + 1] = MaxValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 		}
 		
 	}
 	auto end = std::chrono::steady_clock::now();
-	t2 = omp_get_wtime();
 
 	std::chrono::duration<double> elapsed_seconds = end - start;
 
-
 	vec_energy[Nt] = CalculateEnergyPML_3dimen(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-	vec_energy_acc[Nt] = CalculateEnergyPML_3dimen_accurate(cube, compensator, Nx, Ny, Nz, delta_x, delta_y, delta_z);
+	
 
 	double result = vec_energy[Nt] / vec_energy[Nt/2];
 
-	//vec_average_dataE[Nt] = AverageValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-	//vec_average_dataB[Nt] = AverageValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-	//vec_max_dataE[Nt] = MaxValueElectric(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
-	//vec_max_dataB[Nt] = MaxValueMagnetic(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z);
 
-
+	//Graph_Solution_in_one_planes_3dimen<ftype>(cube, Nx, Ny, Nz, delta_x, dx, dy, dz);
 	Graph_Solution_two_planes_3d_python<ftype>(cube, Nx, Ny, Nz, delta_x, delta_y, delta_z, dx, dy, dz, dt, T,
-		n, "Ey_3d_ff_OpenMP.csv", "Bz_3d_ff_OpenMP.csv");
+		n, result, "Ey_3d_dd_OpenMP_2хgrid.csv", "Bz_3d_dd_OpenMP_2хgrid.csv");
 
 	std::cout << "reflection coefficient = " << result << "\n";
 	std::cout << "elapsed time = " << elapsed_seconds.count() << "\n";
-
-
-	//����� ������� ������� � ����
-
-	ofstream numb_energy(file_energy);
-
-	numb_energy << "Nx= " << Nx << ";  Ny= " << Ny << ";   Nz= " << Nz << "    " << endl;
-	numb_energy << "delta_x= " << delta_x << ";  delta_y= " << delta_y << ";   delta_z= " << delta_z << "    " << endl;
-	numb_energy << sigma_x << ";  " << sigma_y << ";   " << sigma_y << ";    " << endl<<endl;
-
-	numb_energy << ";" << "R" << ";" << ";" << ";" << "R_accurate"  << endl;
-
-	for (int s = 0; s < Nt + 1; s++)
-	{
-		numb_energy << dt * (double)(s) << ";" << vec_energy[s] <<";"<< ";" << dt * (double)(s) << ";" << vec_energy_acc[s] << endl;
-	}
-	numb_energy << endl << endl;
-	numb_energy.close();
-
-	//ofstream numb_data(file_data);
-	//numb_data << "Nx= " << Nx << ";  Ny= " << Ny << ";   Nz= " << Nz << "    " << endl;
-	//numb_data << "delta_x= " << delta_x << ";  delta_y= " << delta_y << ";   delta_z= " << delta_z << "    " << endl;
-	//numb_data << sigma_x << ";  " << sigma_y << ";   " << sigma_y << ";    " << endl << endl;
-
-	//numb_data << ";" << file_data << ";;;" << file_data << endl;
-
-	//for (int s = 0; s < Nt + 1; s++)
-	//{
-	//	numb_data << dt * (double)(s) << ";" << vec_dataEy[s] << ";" << ";" << dt * (double)(s) << ";" << vec_dataBz[s] << endl;
-	//}
-	//numb_data << endl << endl;
-	//numb_data.close();
-
-	//ofstream numb_charact(file_charact);
-	//numb_charact <<endl;
-	//numb_charact << ";" << "maxData Electric" << ";;;;" << "maxData Magnetic" << ";;;" << "averageData Electric" << ";;;" << "averageDataMagnetic" << endl;
-	//for (int s = 0; s < Nt + 1; s++)
-	//{
-	//	numb_charact << dt * (double)(s) << ";" << vec_max_dataE[s] << ";" << ";" << dt * (double)(s) << ";" << vec_max_dataB[s]<<";;;";
-	//	numb_charact << dt * (double)(s) << ";" << vec_average_dataE[s] << ";" << ";" << dt * (double)(s) << ";" << vec_average_dataB[s];
-	//	numb_charact << endl;
-	//}
-	//numb_charact.close();
 
 	return result;
 }

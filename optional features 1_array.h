@@ -35,12 +35,14 @@ void Graph_for_Coeff_three_dimen(data3d<COEFF<ftypePML>>& Coeff, int Nx, int Ny,
 	//����� ������� ���� � ����
 	ofstream numb_sigma(file_coeff);
 
-	numb_sigma << ";" << "Coeff1" << ";;;" << "Coeff2" << ";;" << "Eyx" << endl;
+	numb_sigma << ";" << "Coeff1" << ";;;" << "Coeff2" << ";;" << "Bxy" << endl;
 
-	for (int s = 1; s < Nx + 2 * delta + 1; s++)
+	for (int s = 1; s < Ny + 2 * delta + 1; s++)
 	{
-		numb_sigma << dx * (ftypePML)(s - 1) << ";" << setprecision(16) << Coeff(s, delta / 2, delta / 2).Bzx1 << ";;";
-		numb_sigma << dx * (ftypePML)(s - 1) << ";" << std::setprecision(16) << Coeff(s, delta / 2, delta / 2).Bzx2 << endl;
+		numb_sigma << dx * (ftypePML)(s - 1) << ";" << setprecision(16)<< Coeff(Nx + 1.5 * delta, s, 1).Bxy2 << ";;";
+		numb_sigma << dx * (ftypePML)(s - 1) << ";" << setprecision(16) << Coeff(Nx + 1.5 * delta, s, 1).Byx2 << ";;";
+		numb_sigma << dx * (ftypePML)(s - 1) << ";" << std::setprecision(16) << Coeff(Nx + 1.5 * delta, s, 1).Exy2 << ";;";
+		numb_sigma << dx * (ftypePML)(s - 1) << ";" << std::setprecision(16) << Coeff(Nx + 1.5*delta, s, 1).Eyx2 << endl;
 	}
 	numb_sigma << endl << endl;
 
@@ -266,22 +268,24 @@ void Graph_Solution_in_two_planes_3dimen(data3d<Component<ftype>>& cube, int Nx,
 	numbBz.close();
 }
 
+
+//
 template <class ftype>
-void Graph_Solution_in_one_planes_3dimen(data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz, int delta, ftype dx, ftype dy, ftype dz, Direction direction)
+void Graph_Solution_in_one_planes_3dimen(data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz, int delta, ftype dx, ftype dy, ftype dz)
 {
-	ofstream numbEx("graph_solution_E_x_one_dimen_hh-sigma 49.6.csv"), numbBx("graph_solution_B_x_one_dimen_hh-sigma 49.6.csv");
-	ofstream numbEy("graph_solution_E_y_one_dimen_hh-sigma 49.6.csv"), numbBy("graph_solution_B_y_one_dimen_hh-sigma 49.6.csv");
-	ofstream numbEz("graph_solution_E_z_one_dimen_hh-sigma 49.6.csv"), numbBz("graph_solution_B_z_one_dimen_hh-sigma 49.6.csv");
+	ofstream numbEx("E_x_1d_dd_4xgrid.csv"), numbBx("B_x_1d_dd_4xgrid.csv");
+	ofstream numbEy("E_y_1d_dd_4xgrid.csv"), numbBy("B_y_1d_dd_4xgrid.csv");
+	ofstream numbEz("E_z_1d_dd_4xgrid.csv"), numbBz("B_z_1d_dd_4xgrid.csv");
 
 	for (int i = 1; i < Nx + 2 * delta + 1; i++)
 	{
-		numbEx << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz / 2 + delta).Ex << endl;
-		numbEy << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz / 2 + delta).Ey << endl;
-		numbEz << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz / 2 + delta).Ez << endl;
+		numbEx << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz).Ex << endl;
+		numbEy << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz).Ey << endl;
+		numbEz << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz).Ez << endl;
 
-		numbBx << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz / 2 + delta).Bx << endl;
-		numbBy << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz / 2 + delta).By << endl;
-		numbBz << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz / 2 + delta).Bz << endl;
+		numbBx << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz).Bx << endl;
+		numbBy << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz).By << endl;
+		numbBz << dx * (double)(i) << ";" << cube(i, Ny / 2 + delta, Nz).Bz << endl;
 
 	}
 
@@ -296,7 +300,7 @@ void Graph_Solution_in_one_planes_3dimen(data3d<Component<ftype>>& cube, int Nx,
 template <class ftype>
 void Graph_Solution_two_planes_3d_python (data3d<Component<ftype>>& cube, int Nx, int Ny, int Nz,
 	int delta_x, int delta_y, int delta_z, ftype dx, ftype dy, ftype dz, ftype dt, ftype T,
-	int n, string file_name1, string file_name2)
+	int n, double R, string file_name1, string file_name2)
 {
 	ofstream numbEy(file_name1), numbBz(file_name2);
 
@@ -316,15 +320,20 @@ void Graph_Solution_two_planes_3d_python (data3d<Component<ftype>>& cube, int Nx
 		numbBz << endl;
 
 	}
+	numbEy << endl;
+	numbBz << endl;
+
 	numbEy << "Nx = " << Nx << ";  Ny = " << Ny << ";   Nz = " << Nz << endl;
 	numbEy << "delta_x = " << delta_x << ";  delta_y = " << delta_y << ";   delta_z = " << delta_z << endl;
 	numbEy << "dx = " << dx << ";   dy = " << dy << ";   dz = " << dz << endl;
 	numbEy << "T = " << T << ";   dt = " << dt << ";   n = " << n << endl;
+	numbEy << "Refl coeff = " <<R;
 
 	numbBz << "Nx = " << Nx << ";  Ny = " << Ny << ";   Nz = " << Nz << endl;
 	numbBz << "delta_x = " << delta_x << ";  delta_y = " << delta_y << ";   delta_z = " << delta_z << endl;
-	numbEy << "dx = " << dx << ";   dy = " << dy << ";   dz = " << dz << endl;
+	numbBz << "dx = " << dx << ";   dy = " << dy << ";   dz = " << dz << endl;
 	numbBz << "T = " << T << ";   dt = " << dt << ";   n = " << n << endl;
+	numbBz << "Refl coeff = " << R;
 
 	numbEy.close();
 	numbBz.close();
