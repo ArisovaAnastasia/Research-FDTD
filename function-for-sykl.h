@@ -3,6 +3,7 @@
 #include <cmath> 
 
 #define IsPrint false 
+#define IsPrint2 false 
 
 template <class ftypePML>
 ftypePML distanceH(int N, int delta, int i)
@@ -59,12 +60,12 @@ void Initializing_cube_sycl_half_version(Fields<ftype_init>& cube, SplitFields<f
 				cube_split.Bzx(i, j, k) = (ftypePML)0.0;
 				cube_split.Bzy(i, j, k) = (ftypePML)0.0;
 
-				cube.Ex(i, j, k) = (ftype_init)0.0;
-				cube.Ey(i, j, k) = (ftype_init)0.0;
-				cube.Ez(i, j, k) = (ftype_init)0.0;
-				cube.Bx(i, j, k) = (ftype_init)0.0;
-				cube.By(i, j, k) = (ftype_init)0.0;
-				cube.Bz(i, j, k) = (ftype_init)0.0;
+				cube.Ex(i, j, k) = cl::sycl::detail::float2Half(0.0);
+				cube.Ey(i, j, k) = cl::sycl::detail::float2Half(0.0);
+				cube.Ez(i, j, k) = cl::sycl::detail::float2Half(0.0);
+				cube.Bx(i, j, k) = cl::sycl::detail::float2Half(0.0);
+				cube.By(i, j, k) = cl::sycl::detail::float2Half(0.0);
+				cube.Bz(i, j, k) = cl::sycl::detail::float2Half(0.0);
 			}
 }
 
@@ -533,27 +534,273 @@ void Add_Currents_sycl_half_version(ftype_init& Ex, ftype_init& Ey, ftype_init& 
 }
 
 template <class ftype_init>
-void Calculate_Currents_sycl_half_version(Fields<ftype_init>& cube, ftype_init dy, ftype_init dz, std::pair <ftype_init, ftype_init> cd, std::pair <ftype_init, ftype_init> fg,
-	int offset, int index_start_x, int index_start_y, int index_start_z, int j, int k, ftype_init A,
-	ftype_init t1, ftype_init t2, ftype_init t0_x, ftype_init tp_x, ftype_init y0, ftype_init x1, ftype_init x2, ftype_init ay_transverse, ftype_init omega_, ftype_init k_)
+void Calculate_Currents_sycl_half_version(char comp, sycl::queue& q, Fields<ftype_init>& cube, int it, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z,
+	ftype_init dx, ftype_init dy, ftype_init dz, ftype_init dt,
+	std::pair <ftype_init, ftype_init> ab, std::pair <ftype_init, ftype_init> cd, std::pair <ftype_init, ftype_init> fg)
 {
-		ftype_init y1 = (ftype_init)(cd.first + dy * (ftype_init)j + (ftype_init)0.5 * dy);
-		ftype_init y2 = (ftype_init)(cd.first + dy * (ftype_init)j);
+	ftype_init tp_x;
+	ftype_init tp_y;
+	ftype_init tp_z;
 
-		ftype_init z1 = (ftype_init)(fg.first + dz * (ftype_init)k + (ftype_init)0.5 * dz);
-		ftype_init z2 = (ftype_init)(fg.first + dz * (ftype_init)k);
+	ftype_init lambda_;
+	ftype_init k_ ;
+	ftype_init omega_ ;
+	ftype_init A ; //amplitude
+	ftype_init x0;
+	ftype_init y0 ;
+	ftype_init z0;
+	ftype_init t0_x;
+	ftype_init t0_y;
+	ftype_init t0_z ;
 
-		// Ez and By has the same y coordinate
-		cube.Ey(offset + index_start_x, j + index_start_y, k + index_start_z) += A * exp(-(t1 - t0_x) * (t1 - t0_x) / (tp_x * tp_x))
-			* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) *
-			sin(omega_ * t1 - k_ * x1); // sin(phase), phase = omega * t - k * x
-		cube.Bz(offset + index_start_x, j + index_start_y, k + index_start_z) += A * exp(-(t2 - t0_x) * (t2 - t0_x) / (tp_x * tp_x))
-			* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) *
-			sin(omega_ * t2 - k_ * x2); // sin(phase), phase = omega * t - k * x
+	q.submit([&](sycl::handler& h) {
+		sycl::stream out(4096, 4096, h);
+		
+		tp_x = ab.second / ftype_init(6.0f);
+		tp_y = cd.second / ftype_init(6.0f);
+		tp_z = fg.second / ftype_init(6.0f);
+
+		lambda_ = ftype_init(2.0f) * ftype_init((float)M_PI)
+			/ ftype_init(4.0f);
+		k_ = ftype_init(2.0f) * ftype_init((float)M_PI) / lambda_;
+		omega_ = ftype_init(2.0f) * ftype_init((float)M_PI) / lambda_;
+		A = ftype_init(10.0f); //amplitude
+		x0 = (ab.second - ab.first) / ftype_init(2.0f);
+		y0 = (cd.second - cd.first) / ftype_init(2.0f);
+		z0 = (fg.second - fg.first) / ftype_init(2.0f);
+		t0_x = ftype_init(3.0f) * tp_x;
+		t0_y = ftype_init(3.0f) * tp_y;
+		t0_z = ftype_init(3.0f) * tp_z;
+	}).wait_and_throw();
+
+	int index_start_x = delta_x + 1;
+	int index_start_y = delta_y + 1;
+	int index_start_z = delta_z + 1;
+
+	int offset = 5;
+	float foffset = 5.0;
+
+	switch (comp) {
+		case 'X': {
+			/*
+			q.submit([&](sycl::handler& h) {
+				sycl::stream out(4096, 4096, h);
+				h.parallel_for(range<1>(2), [=](auto index) {
+
+				half a = half(float(0.1 + 0.2));
+				half f = half(float(0.2 + 0.3));
+				half c = a + f;
+
+				out << half(a) << " " << a << sycl::endl;
+				out << half(f) << " " << f << sycl::endl;
+				out << half(c) << " result  " << c << sycl::endl;
+					});
+				}).wait_and_throw();
+				*/
+			q.submit([&](sycl::handler& h) {
+				sycl::stream out(4096, 4096, h);
+
+				h.parallel_for(range<2>(Ny, Nz), [=](auto index) {
+
+					ftype_init ax_transverse = ab.second * ftype_init(3.0f / 4.0f);
+					ftype_init ay_transverse = cd.second * ftype_init(1.0f / 6.0f);
+					ftype_init az_transverse = fg.second * ftype_init(1.0f / 6.0f);
+
+					ftype_init t1 = dt * ftype_init((float)it);
+					ftype_init t2 = t1 + ftype_init(0.5f) * dt;
+					ftype_init x1 = ab.first + dx * ftype_init((float)foffset)
+						+ ftype_init(0.5f) * dx;
+					ftype_init x2 = ab.first + dx * ftype_init((float)foffset);
+
+					int j = index[0];
+					int k = index[1];
+
+					auto kernel_cube = cube;
+
+					ftype_init y1 = (cd.first + dy * ftype_init((float)j) + ftype_init(0.5f) * dy);
+					ftype_init y2 = (cd.first + dy * ftype_init((float)j));
+
+					ftype_init z1 = (fg.first + dz * ftype_init((float)k) + ftype_init(0.5f) * dz);
+					ftype_init z2 = (fg.first + dz * ftype_init((float)k));
+
+					ftype_init e, b;
+
+					// Ez and By has the same y coordinate
+					 
+					 e = A * exp(-(t1 - t0_x) * (t1 - t0_x) / (tp_x * tp_x))
+						* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) * exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse))
+						* sin(omega_ * t1 - k_ * x1);
+					 b = A * exp(-(t2 - t0_x) * (t2 - t0_x) / (tp_x * tp_x))
+						* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) * exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse)) *
+						sin(omega_ * t2 - k_ * x2);
+
+					kernel_cube.Ey(offset + index_start_x, j + index_start_y, k + index_start_z) += e;
+					kernel_cube.Bz(offset + index_start_x, j + index_start_y, k + index_start_z) += b;
+
+					//out << float(e) << sycl::endl;
+					});
+				}).wait_and_throw();
+				
+			break;
+		}
+
+		case 'x': {
+			ftype_init ax_transverse = ab.second * (ftype_init)3. / (ftype_init)4.;
+			ftype_init ay_transverse = cd.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init az_transverse = fg.second * (ftype_init)1. / (ftype_init)6.;
+
+			ftype_init t1 = dt * (ftype_init)it;
+			ftype_init t2 = t1 + (ftype_init)0.5 * dt;
+			ftype_init x1 = (ftype_init)(ab.first + dx * (ftype_init)offset + (ftype_init)0.5 * dx);
+			ftype_init x2 = (ftype_init)(ab.first + dx * (ftype_init)offset);
+
+			for (int j = 0; j < Ny; j++)
+				for (int k = 0; k < Nz; k++) {
+
+					ftype_init y1 = (ftype_init)(cd.first + dy * (ftype_init)j + (ftype_init)0.5 * dy);
+					ftype_init y2 = (ftype_init)(cd.first + dy * (ftype_init)j);
+
+					ftype_init z1 = (ftype_init)(fg.first + dz * (ftype_init)k + (ftype_init)0.5 * dz);
+					ftype_init z2 = (ftype_init)(fg.first + dz * (ftype_init)k);
+
+					// Ez and By has the same y coordinate
+					cube.Ey(Nx + delta_x - offset, j + index_start_y, k + index_start_z) -= A * exp(-(t1 - t0_x) * (t1 - t0_x) / (tp_x * tp_x))
+						* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) * exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse))
+						* sin(omega_ * t1 - k_ * x1); // sin(phase), phase = omega * t - k * x
+					cube.Bz(Nx + delta_x - offset, j + index_start_y, k + index_start_z) += A * exp(-(t2 - t0_x) * (t2 - t0_x) / (tp_x * tp_x))
+						* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) * exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse)) *
+						sin(omega_ * t2 - k_ * x2); // sin(phase), phase = omega * t - k * x
+				}
+			break;
+		}
+
+		case 'Y': {
+
+			ftype_init ax_transverse = ab.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init ay_transverse = cd.second * (ftype_init)3. / (ftype_init)4.;
+			ftype_init az_transverse = fg.second * (ftype_init)1. / (ftype_init)6.;
+
+			ftype_init t1 = dt * (ftype_init)it;
+			ftype_init t2 = t1 + (ftype_init)0.5 * dt;
+			ftype_init y1 = (ftype_init)(cd.first + dy * (ftype_init)offset + (ftype_init)0.5 * dy);
+			ftype_init y2 = (ftype_init)(cd.first + dy * (ftype_init)offset);
+
+			for (int i = 0; i < Nx; i++)
+				for (int k = 0; k < Nz; k++) {
+
+					ftype_init x1 = (ftype_init)(ab.first + dx * (ftype_init)i + (ftype_init)0.5 * dx);
+					ftype_init x2 = (ftype_init)(ab.first + dx * (ftype_init)i);
+
+					ftype_init z1 = (ftype_init)(fg.first + dz * (ftype_init)k + (ftype_init)0.5 * dz);
+					ftype_init z2 = (ftype_init)(fg.first + dz * (ftype_init)k);
+
+					// Ez and By has the same y coordinate
+					cube.Ez(i + index_start_x, offset + index_start_y, k + index_start_z) += A * exp(-(t1 - t0_y) * (t1 - t0_y) / (tp_y * tp_y))
+						* exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse)) * exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) *
+						sin(omega_ * t1 - k_ * y1); // sin(phase), phase = omega * t - k * x
+					cube.Bx(i + index_start_x, offset + index_start_y, k + index_start_z) += A * exp(-(t2 - t0_y) * (t2 - t0_y) / (tp_y * tp_y))
+						* exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse)) * exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) *
+						sin(omega_ * t2 - k_ * y2); // sin(phase), phase = omega * t - k * x
+				}
+			break;
+		}
+
+		case 'y': {
+
+			ftype_init ax_transverse = ab.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init ay_transverse = cd.second * (ftype_init)3. / (ftype_init)4.;
+			ftype_init az_transverse = fg.second * (ftype_init)1. / (ftype_init)6.;
+
+			ftype_init t1 = dt * (ftype_init)it;
+			ftype_init t2 = t1 + (ftype_init)0.5 * dt;
+			ftype_init y1 = (ftype_init)(cd.first + dy * (ftype_init)offset + (ftype_init)0.5 * dy);
+			ftype_init y2 = (ftype_init)(cd.first + dy * (ftype_init)offset);
+
+			for (int i = 0; i < Nx; i++)
+				for (int k = 0; k < Nz; k++) {
+
+					ftype_init x1 = (ftype_init)(ab.first + dx * (ftype_init)i + (ftype_init)0.5 * dx);
+					ftype_init x2 = (ftype_init)(ab.first + dx * (ftype_init)i);
+
+					ftype_init z1 = (ftype_init)(fg.first + dz * (ftype_init)k + (ftype_init)0.5 * dz);
+					ftype_init z2 = (ftype_init)(fg.first + dz * (ftype_init)k);
+
+					// Ez and By has the same y coordinate
+					cube.Ez(i + index_start_x, Ny + delta_y - offset, k + index_start_z) -= A * exp(-(t1 - t0_y) * (t1 - t0_y) / (tp_y * tp_y))
+						* exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse)) * exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) *
+						sin(omega_ * t1 - k_ * y1); // sin(phase), phase = omega * t - k * x
+					cube.Bx(i + index_start_x, Ny + delta_y - offset, k + index_start_z) += A * exp(-(t2 - t0_y) * (t2 - t0_y) / (tp_y * tp_y))
+						* exp(-(z2 - z0) * (z2 - z0) / (az_transverse * az_transverse)) * exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) *
+						sin(omega_ * t2 - k_ * y2); // sin(phase), phase = omega * t - k * x
+				}
+			break;
+		}
+
+		case 'Z': {
+			ftype_init ax_transverse = ab.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init ay_transverse = cd.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init az_transverse = fg.second * (ftype_init)3. / (ftype_init)4.;
+
+			ftype_init t1 = dt * (ftype_init)it;
+			ftype_init t2 = t1 + (ftype_init)0.5 * dt;
+			ftype_init z1 = (ftype_init)(fg.first + dz * (ftype_init)offset + (ftype_init)0.5 * dz);
+			ftype_init z2 = (ftype_init)(fg.first + dz * (ftype_init)offset);
+
+			for (int i = 0; i < Nx; i++)
+				for (int j = 0; j < Ny; j++) {
+
+					ftype_init x1 = (ftype_init)(ab.first + dx * (ftype_init)i + (ftype_init)0.5 * dx);
+					ftype_init x2 = (ftype_init)(ab.first + dx * (ftype_init)i);
+
+					ftype_init y1 = (ftype_init)(cd.first + dy * (ftype_init)j + (ftype_init)0.5 * dy);
+					ftype_init y2 = (ftype_init)(cd.first + dy * (ftype_init)j);
+
+					// Ez and By has the same y coordinate
+					cube.Ex(i + index_start_x, j + index_start_y, offset + index_start_z) += A * exp(-(t1 - t0_z) * (t1 - t0_z) / (tp_z * tp_z))
+						* exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) * exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) *
+						sin(omega_ * t1 - k_ * z1); // sin(phase), phase = omega * t - k * x
+					cube.By(i + index_start_x, j + index_start_y, offset + index_start_z) += A * exp(-(t2 - t0_z) * (t2 - t0_z) / (tp_z * tp_z))
+						* exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse))* exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) *
+						sin(omega_ * t2 - k_ * z2); // sin(phase), phase = omega * t - k * x
+				}
+			break;
+		}
+
+		case 'z': {
+			ftype_init ax_transverse = ab.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init ay_transverse = cd.second * (ftype_init)1. / (ftype_init)6.;
+			ftype_init az_transverse = fg.second * (ftype_init)3. / (ftype_init)4.;
+
+			ftype_init t1 = dt * (ftype_init)it;
+			ftype_init t2 = t1 + (ftype_init)0.5 * dt;
+			ftype_init z1 = (ftype_init)(fg.first + dz * (ftype_init)offset + (ftype_init)0.5 * dz);
+			ftype_init z2 = (ftype_init)(fg.first + dz * (ftype_init)offset);
+
+			for (int i = 0; i < Nx; i++)
+				for (int j = 0; j < Ny; j++) {
+
+					ftype_init x1 = (ftype_init)(ab.first + dx * (ftype_init)i + (ftype_init)0.5 * dx);
+					ftype_init x2 = (ftype_init)(ab.first + dx * (ftype_init)i);
+
+					ftype_init y1 = (ftype_init)(cd.first + dy * (ftype_init)j + (ftype_init)0.5 * dy);
+					ftype_init y2 = (ftype_init)(cd.first + dy * (ftype_init)j);
+
+					// Ez and By has the same y coordinate
+					cube.Ex(i + index_start_x, j + index_start_y, Nz + delta_z - offset) -= A * exp(-(t1 - t0_z) * (t1 - t0_z) / (tp_z * tp_z))
+						* exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) * exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) *
+						sin(omega_ * t1 - k_ * z1); // sin(phase), phase = omega * t - k * x
+					cube.By(i + index_start_x, j + index_start_y, Nz + delta_z - offset) += A * exp(-(t2 - t0_z) * (t2 - t0_z) / (tp_z * tp_z))
+						* exp(-(x2 - x0) * (x2 - x0) / (ax_transverse * ax_transverse)) * exp(-(y2 - y0) * (y2 - y0) / (ay_transverse * ay_transverse)) *
+						sin(omega_ * t2 - k_ * z2); // sin(phase), phase = omega * t - k * x
+				}
+			break;
+		}
+	}
 }
 
+// DOMAIN
 template <class ftype_init>
-void Update_electric_field_sycl_half_version(Fields<ftype_init> cube,
+void Update_electric_domain_half_version(Fields<ftype_init> cube,
 	ftype_init dt_x, ftype_init dt_y, ftype_init dt_z, int i, int j, int k)
 {
 	ftype_init tEx, tEy, tEz;
@@ -573,7 +820,7 @@ void Update_electric_field_sycl_half_version(Fields<ftype_init> cube,
 }
 
 template <class ftype_init>
-void Update_magnetic_field_sycl_half_version(Fields<ftype_init> cube,
+void Update_magnetic_domain_half_version(Fields<ftype_init> cube,
 	ftype_init dt_x, ftype_init dt_y, ftype_init dt_z, int i, int j, int k)
 {
 	ftype_init tBx, tBy, tBz;
@@ -592,11 +839,316 @@ void Update_magnetic_field_sycl_half_version(Fields<ftype_init> cube,
 	cube.Bz(i, j, k) = tBz;
 }
 
+
+// PML
 template <class ftype, class ftypePML>
-inline void Update_electric_field_PML_sycl_half_version(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+void Run_PML_electric(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z) {
+	// corner on z=0
+	if (IsPrint) std::cout << "corner on z=0" << std::endl;
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	// corner on z=N
+	if (IsPrint) std::cout << "corner on z=n" << std::endl;
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XY  z=0
+	if (IsPrint) std::cout << "XY  z=0" << std::endl;
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = 1; k < delta_z; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XZ  y=0
+	if (IsPrint) std::cout << "XZ  y=0" << std::endl;
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = 1; j < delta_y; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//YZ  x=0
+	if (IsPrint) std::cout << "YZ  x=0" << std::endl;
+	for (int i = 1; i < delta_x; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XY  z=N
+	if (IsPrint) std::cout << "XY  z=N" << std::endl;
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XZ  y=N
+	if (IsPrint) std::cout << "XZ  y=N" << std::endl;
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//YZ  x=N
+	if (IsPrint) std::cout << "YZ  x=N" << std::endl;
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+
+	// колонны вдоль ребер куба
+
+	if (IsPrint) std::cout << "X y=0 z=0" << std::endl;
+	//X y=0 z=0
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "X y=n z=0" << std::endl;
+	//X y=n z=0
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "X y=n z=n" << std::endl;
+	//X y=0 z=n
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "X y=n z=n" << std::endl;
+	//X y=n z=n
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Y x=0 z=0" << std::endl;
+	//Y x=0 z=0
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Y x=n z=0" << std::endl;
+	//Y x=n z=0
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Y x=0 z=n" << std::endl;
+	//Y x=0 z=n
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Y x=n z=n" << std::endl;
+	//Y x=n z=n
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Z x=0 y=0" << std::endl;
+	//Z x=0 y=0
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Z x=n y=0" << std::endl;
+	//Z x=n y=0
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Z x=0 y=n" << std::endl;
+	//Z x=0 y=n
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	if (IsPrint) std::cout << "Z x=n y=n" << std::endl;
+	//Z x=n y=n
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_electric_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+}
+
+template <class ftype, class ftypePML>
+void Run_PML_magnetic(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z) {
+
+	// corner on z=0
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	// corner on z=N
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	//XY  z=0
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XZ  y=0
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//YZ  x=0
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XY  z=N
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = Nz + delta_z + 2; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//XZ  y=N
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = Ny + delta_y + 2; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//YZ  x=N
+	for (int i = Nx + delta_x + 2; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	// колонны вдоль ребер куба
+	//X y=0 z=0
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//X y=n z=0
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//X y=0 z=n
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//X y=n z=n
+	for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	//Y x=0 z=0
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//Y x=n z=0
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = 1; k < delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//Y x=0 z=n
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//Y x=n z=n
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+			for (int k = Nz + delta_z + 1; k < Nz + 2 * delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+
+	//Z x=0 y=0
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//Z x=n y=0
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = 1; j < delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//Z x=0 y=n
+	for (int i = 1; i < delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+	//Z x=n y=n
+	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i++)
+		for (int j = Ny + delta_y + 1; j < Ny + 2 * delta_y + 1; j++)
+			for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+				Update_magnetic_PML<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+}
+
+template <class ftype, class ftypePML>
+inline void Update_electric_PML(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
 	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
 {
 	ftypePML tExy, tExz, tEyx, tEyz, tEzx, tEzy;
+
+	//if (IsPrint)
+	//	std::cout << "Update_electric_PML: " << " i=" << i << " j=" << j << " k=" << k << std::endl;
 
 	//c1*(A + b*c2)
 	tExy = cube_split.Exy(i, j, k) * Coeff.Exy1(i, j, k) + ((cube_split.Bzx(i, j + 1, k) + cube_split.Bzy(i, j + 1, k)) - (cube_split.Bzx(i, j, k) + cube_split.Bzy(i, j, k))) * Coeff.Exy2(i, j, k) * (_1dy);
@@ -678,44 +1230,92 @@ inline void Update_electric_field_PML_sycl_half_version(SplitFields<ftypePML> cu
 }
 
 template <class ftype, class ftypePML>
-inline void Update_electric_field_PML_sycl_half_version_bound(Fields<ftype> cube,
-	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+inline void Update_magnetic_PML(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
 	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
+{
+	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
+
+	//if (IsPrint)
+	//	std::cout << "Update_magnetic_PML: " << " i=" << i << " j=" << j << " k=" << k << std::endl;
+
+	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - ((cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k)) - (cube_split.Ezx(i, j - 1, k) + cube_split.Ezy(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
+
+	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + ((cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k)) - (cube_split.Eyx(i, j, k - 1) + cube_split.Eyz(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
+
+	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + ((cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k)) - (cube_split.Ezx(i - 1, j, k) + cube_split.Ezy(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
+
+	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - ((cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k)) - (cube_split.Exy(i, j, k - 1) + cube_split.Exz(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
+
+	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - ((cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k)) - (cube_split.Eyx(i - 1, j, k) + cube_split.Eyz(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
+
+	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + ((cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k)) - (cube_split.Exy(i, j - 1, k) + cube_split.Exz(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
+	if (std::abs(tBxy) <= 1e-150) {
+		tBxy = 0.0;
+	}
+	if (std::abs(tBxz) <= 1e-150) {
+		tBxz = 0.0;
+	}
+	if (std::abs(tByx) <= 1e-150) {
+		tByx = 0.0;
+	}
+	if (std::abs(tByz) <= 1e-150) {
+		tByz = 0.0;
+	}
+	if (std::abs(tBzx) <= 1e-150) {
+		tBzx = 0.0;
+	}
+	if (std::abs(tBzy) <= 1e-150) {
+		tBzy = 0.0;
+	}
+
+	cube_split.Bxy(i, j, k) = tBxy;
+	cube_split.Bxz(i, j, k) = tBxz;
+	cube_split.Byx(i, j, k) = tByx;
+	cube_split.Byz(i, j, k) = tByz;
+	cube_split.Bzx(i, j, k) = tBzx;
+	cube_split.Bzy(i, j, k) = tBzy;
+}
+
+// PML BOUND
+template <class ftype, class ftypePML>
+inline void Update_electric_PML_BOUND_half_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k, sycl::stream out)
 {
 	ftypePML tExy, tExz, tEyx, tEyz, tEzx, tEzy;
 
 	//c1*(A + b*c2)
-	tExy = cube_split.Exy(i, j, k) * Coeff.Exy1(i, j, k) + ((ftypePML)cl::sycl::detail::half2Float(cube.Bz(i, j + 1, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Bz(i, j, k))) * Coeff.Exy2(i, j, k) * (_1dy);
+	tExy = cube_split.Exy(i, j, k) * Coeff.Exy1(i, j, k) + (float(cube.Bz(i, j + 1, k)) - float(cube.Bz(i, j, k))) * Coeff.Exy2(i, j, k) * (_1dy);
 
-	tExz = cube_split.Exz(i, j, k) * Coeff.Exz1(i, j, k) - ((ftypePML)cl::sycl::detail::half2Float(cube.By(i, j, k + 1)) - (ftypePML)cl::sycl::detail::half2Float(cube.By(i, j, k))) * Coeff.Exz2(i, j, k) * (_1dz);
+	tExz = cube_split.Exz(i, j, k) * Coeff.Exz1(i, j, k) - (float(cube.By(i, j, k + 1)) - float(cube.By(i, j, k))) * Coeff.Exz2(i, j, k) * (_1dz);
 
-	tEyx = cube_split.Eyx(i, j, k) * Coeff.Eyx1(i, j, k) - ((ftypePML)cl::sycl::detail::half2Float(cube.Bz(i + 1, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Bz(i, j, k))) * Coeff.Eyx2(i, j, k) * (_1dx);
+	tEyx = cube_split.Eyx(i, j, k) * Coeff.Eyx1(i, j, k) - (float(cube.Bz(i + 1, j, k)) - float(cube.Bz(i, j, k))) * Coeff.Eyx2(i, j, k) * (_1dx);
 
-	tEyz = cube_split.Eyz(i, j, k) * Coeff.Eyz1(i, j, k) + ((ftypePML)cl::sycl::detail::half2Float(cube.Bx(i, j, k + 1)) - (ftypePML)cl::sycl::detail::half2Float(cube.Bx(i, j, k))) * Coeff.Eyz2(i, j, k) * (_1dz);
+	tEyz = cube_split.Eyz(i, j, k) * Coeff.Eyz1(i, j, k) + (float(cube.Bx(i, j, k + 1)) - float(cube.Bx(i, j, k))) * Coeff.Eyz2(i, j, k) * (_1dz);
 
-	tEzx = cube_split.Ezx(i, j, k) * Coeff.Ezx1(i, j, k) + ((ftypePML)cl::sycl::detail::half2Float(cube.By(i + 1, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.By(i, j, k))) * Coeff.Ezx2(i, j, k) * (_1dx);
+	tEzx = cube_split.Ezx(i, j, k) * Coeff.Ezx1(i, j, k) + (float(cube.By(i + 1, j, k)) - float(cube.By(i, j, k))) * Coeff.Ezx2(i, j, k) * (_1dx);
 
-	tEzy = cube_split.Ezy(i, j, k) * Coeff.Ezy1(i, j, k) - ((ftypePML)cl::sycl::detail::half2Float(cube.Bx(i, j + 1, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Bx(i, j, k))) * Coeff.Ezy2(i, j, k) * (_1dy);
+	tEzy = cube_split.Ezy(i, j, k) * Coeff.Ezy1(i, j, k) - (float(cube.Bx(i, j + 1, k)) - float(cube.Bx(i, j, k))) * Coeff.Ezy2(i, j, k) * (_1dy);
 
 
-	if (std::abs(tExy) <= 1e-150) {
-		tExy = 0.0;
-	}
-	if (std::abs(tExz) <= 1e-150) {
-		tExz = 0.0;
-	}
-	if (std::abs(tEyx) <= 1e-150) {
-		tEyx = 0.0;
-	}
-	if (std::abs(tEyz) <= 1e-150) {
-		tEyz = 0.0;
-	}
-	if (std::abs(tEzx) <= 1e-150) {
-		tEzx = 0.0;
-	}
-	if (std::abs(tEzy) <= 1e-150) {
-		tEzy = 0.0;
-	}
+	//if (std::abs(tExy) > 0.0) {
+	//	out << tExy;
+	//}
+	//if (std::abs(tExz) > 0.0) {
+	//	out << tExz;
+	//}
+	//if (std::abs(tEyx) > 0.0) {
+	//	out << tEyx;
+	//}
+	//if (std::abs(tEyz) > 0.0) {
+	//	out << tEyz;
+	//}
+	//if (std::abs(tEzx) > 0.0) {
+	//	out << tEzx;
+	//}
+	//if (std::abs(tEzy) > 0.0) {
+	//	out << tEzy;
+	//}
 
 	cube_split.Exy(i, j, k) = tExy;
 	cube_split.Exz(i, j, k) = tExz;
@@ -725,11 +1325,103 @@ inline void Update_electric_field_PML_sycl_half_version_bound(Fields<ftype> cube
 	cube_split.Ezy(i, j, k) = tEzy;
 }
 
+template <class ftype, class ftypePML>
+inline void Update_magnetic_PML_BOUND_half_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k, sycl::stream out)
+{
+	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
+
+	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - (float(cube.Ez(i, j, k)) - float(cube.Ez(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
+
+	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + (float(cube.Ey(i, j, k)) - float(cube.Ey(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
+
+	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + (float(cube.Ez(i, j, k)) - float(cube.Ez(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
+
+	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - (float(cube.Ex(i, j, k)) - float(cube.Ex(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
+
+	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - (float(cube.Ey(i, j, k)) - float(cube.Ey(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
+
+	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + (float(cube.Ex(i, j, k)) - float(cube.Ex(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
+
+	//if (std::abs(tBxy) <= 1e-150) {
+	//	tBxy = 0.0;
+	//}
+	//if (std::abs(tBxz) <= 1e-150) {
+	//	tBxz = 0.0;
+	//}
+	//if (std::abs(tByx) <= 1e-150) {
+	//	tByx = 0.0;
+	//}
+	//if (std::abs(tByz) <= 1e-150) {
+	//	tByz = 0.0;
+	//}
+	//if (std::abs(tBzx) <= 1e-150) {
+	//	tBzx = 0.0;
+	//}
+	//if (std::abs(tBzy) <= 1e-150) {
+	//	tBzy = 0.0;
+	//}
+
+	cube_split.Bxy(i, j, k) = tBxy;
+	cube_split.Bxz(i, j, k) = tBxz;
+	cube_split.Byx(i, j, k) = tByx;
+	cube_split.Byz(i, j, k) = tByz;
+	cube_split.Bzx(i, j, k) = tBzx;
+	cube_split.Bzy(i, j, k) = tBzy;
+}
 
 template <class ftype, class ftypePML>
-inline void Update_electric_field_PML_sycl_half_version_bound_2(Fields<ftype> cube,
+inline void Update_magnetic_PML_BOUND_float_version(Fields<ftype> cube,
 	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
-	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k, sycl::stream out)
+{
+	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
+
+	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - ((ftypePML)cube.Ez(i, j, k) - (ftypePML)cube.Ez(i, j - 1, k)) * Coeff.Bxy2(i, j, k) * (_1dy);
+
+	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + ((ftypePML)cube.Ey(i, j, k) - (ftypePML)cube.Ey(i, j, k - 1)) * Coeff.Bxz2(i, j, k) * (_1dz);
+
+	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + ((ftypePML)cube.Ez(i, j, k) - (ftypePML)cube.Ez(i - 1, j, k)) * Coeff.Byx2(i, j, k) * (_1dx);
+
+	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - ((ftypePML)cube.Ex(i, j, k) - (ftypePML)cube.Ex(i, j, k - 1)) * Coeff.Byz2(i, j, k) * (_1dz);
+
+	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - ((ftypePML)cube.Ey(i, j, k) - (ftypePML)cube.Ey(i - 1, j, k)) * Coeff.Bzx2(i, j, k) * (_1dx);
+
+	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + ((ftypePML)cube.Ex(i, j, k) - (ftypePML)cube.Ex(i, j - 1, k)) * Coeff.Bzy2(i, j, k) * (_1dy);
+
+	//if (std::abs(tBxy) > 0.0) {
+	//	out << tBxy;
+	//}
+	//if (std::abs(tBxz) > 0.0) {
+	//	out << tBxz;
+	//}
+	//if (std::abs(tByx) > 0.0) {
+	//	out << tByx;
+	//}
+	//if (std::abs(tByz) > 0.0) {
+	//	out << tByz;
+	//}
+	//if (std::abs(tBzx) > 0.0) {
+	//	out << tBzx;
+	//}
+	//if (std::abs(tBzy) > 0.0) {
+	//	out << tBzy;
+	//}
+
+	cube_split.Bxy(i, j, k) = tBxy;
+	cube_split.Bxz(i, j, k) = tBxz;
+	cube_split.Byx(i, j, k) = tByx;
+	cube_split.Byz(i, j, k) = tByz;
+	cube_split.Bzx(i, j, k) = tBzx;
+	cube_split.Bzy(i, j, k) = tBzy;
+}
+
+
+template <class ftype, class ftypePML>
+inline void Update_electric_PML_BOUND_float_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k, sycl::stream out)
 {
 	ftypePML tExy, tExz, tEyx, tEyz, tEzx, tEzy;
 
@@ -746,25 +1438,24 @@ inline void Update_electric_field_PML_sycl_half_version_bound_2(Fields<ftype> cu
 
 	tEzy = cube_split.Ezy(i, j, k) * Coeff.Ezy1(i, j, k) - ((ftypePML)cube.Bx(i, j + 1, k) - (ftypePML)cube.Bx(i, j, k)) * Coeff.Ezy2(i, j, k) * (_1dy);
 
-
-	if (std::abs(tExy) <= 1e-150) {
-		tExy = 0.0;
-	}
-	if (std::abs(tExz) <= 1e-150) {
-		tExz = 0.0;
-	}
-	if (std::abs(tEyx) <= 1e-150) {
-		tEyx = 0.0;
-	}
-	if (std::abs(tEyz) <= 1e-150) {
-		tEyz = 0.0;
-	}
-	if (std::abs(tEzx) <= 1e-150) {
-		tEzx = 0.0;
-	}
-	if (std::abs(tEzy) <= 1e-150) {
-		tEzy = 0.0;
-	}
+	//if (std::abs(tExy) > 0.0) {
+	//	out << tExy;
+	//}
+	//if (std::abs(tExz) > 0.0) {
+	//	out << tExz;
+	//}
+	//if (std::abs(tEyx) > 0.0) {
+	//	out << tEyx;
+	//}
+	//if (std::abs(tEyz) > 0.0) {
+	//	out << tEyz;
+	//}
+	//if (std::abs(tEzx) > 0.0) {
+	//	out << tEzx;
+	//}
+	//if (std::abs(tEzy) > 0.0) {
+	//	out << tEzy;
+	//}
 
 	cube_split.Exy(i, j, k) = tExy;
 	cube_split.Exz(i, j, k) = tExz;
@@ -773,6 +1464,102 @@ inline void Update_electric_field_PML_sycl_half_version_bound_2(Fields<ftype> cu
 	cube_split.Ezx(i, j, k) = tEzx;
 	cube_split.Ezy(i, j, k) = tEzy;
 }
+
+//REVERSE MATCHING
+
+template <class ftype, class ftypePML>
+void CubeSplit2Cube_electric_float_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, int i, int j, int k) {
+
+	cube.Ex(i, j, k) = (ftype)(cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k));
+	cube.Ey(i, j, k) = (ftype)(cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k));
+	cube.Ez(i, j, k) = (ftype)(cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k));
+
+}
+
+template <class ftype, class ftypePML>
+void CubeSplit2Cube_electric_half_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, int i, int j, int k) {
+
+	cube.Ex(i, j, k) = ftype((cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k)));
+	cube.Ey(i, j, k) = ftype((cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k)));
+	cube.Ez(i, j, k) = ftype((cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k)));
+
+}
+
+template <class ftype, class ftypePML>
+inline void CubeSplit2Cube_magnetic_float_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, int i, int j, int k) {
+
+	cube.Bx(i, j, k) = (ftype)(cube_split.Bxy(i, j, k) + cube_split.Bxz(i, j, k));
+	cube.By(i, j, k) = (ftype)(cube_split.Byx(i, j, k) + cube_split.Byz(i, j, k));
+	cube.Bz(i, j, k) = (ftype)(cube_split.Bzx(i, j, k) + cube_split.Bzy(i, j, k));
+}
+
+template <class ftype, class ftypePML>
+inline void CubeSplit2Cube_magnetic_half_version(Fields<ftype> cube,
+	SplitFields<ftypePML> cube_split, int i, int j, int k) {
+
+	cube.Bx(i, j, k) = ftype((cube_split.Bxy(i, j, k) + cube_split.Bxz(i, j, k)));
+	cube.By(i, j, k) = ftype((cube_split.Byx(i, j, k) + cube_split.Byz(i, j, k)));
+	cube.Bz(i, j, k) = ftype((cube_split.Bzx(i, j, k) + cube_split.Bzy(i, j, k)));
+}
+
+
+
+
+
+//template <class ftype, class ftypePML>
+//inline void Update_electric_field_PML_sycl_half_version_bound(Fields<ftype> cube,
+//	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+//	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
+//{
+//	ftypePML tExy, tExz, tEyx, tEyz, tEzx, tEzy;
+//
+//	//c1*(A + b*c2)
+//	tExy = cube_split.Exy(i, j, k) * Coeff.Exy1(i, j, k) + (float(cube.Bz(i, j + 1, k)) - float(cube.Bz(i, j, k))) * Coeff.Exy2(i, j, k) * (_1dy);
+//
+//	tExz = cube_split.Exz(i, j, k) * Coeff.Exz1(i, j, k) - (float(cube.By(i, j, k + 1)) - float(cube.By(i, j, k))) * Coeff.Exz2(i, j, k) * (_1dz);
+//
+//	tEyx = cube_split.Eyx(i, j, k) * Coeff.Eyx1(i, j, k) - (float(cube.Bz(i + 1, j, k)) - float(cube.Bz(i, j, k))) * Coeff.Eyx2(i, j, k) * (_1dx);
+//
+//	tEyz = cube_split.Eyz(i, j, k) * Coeff.Eyz1(i, j, k) + (float(cube.Bx(i, j, k + 1)) - float(cube.Bx(i, j, k))) * Coeff.Eyz2(i, j, k) * (_1dz);
+//
+//	tEzx = cube_split.Ezx(i, j, k) * Coeff.Ezx1(i, j, k) + (float(cube.By(i + 1, j, k)) - float(cube.By(i, j, k))) * Coeff.Ezx2(i, j, k) * (_1dx);
+//
+//	tEzy = cube_split.Ezy(i, j, k) * Coeff.Ezy1(i, j, k) - (float(cube.Bx(i, j + 1, k)) - float(cube.Bx(i, j, k))) * Coeff.Ezy2(i, j, k) * (_1dy);
+//
+//
+//	if (std::abs(tExy) <= 1e-150) {
+//		tExy = 0.0;
+//	}
+//	if (std::abs(tExz) <= 1e-150) {
+//		tExz = 0.0;
+//	}
+//	if (std::abs(tEyx) <= 1e-150) {
+//		tEyx = 0.0;
+//	}
+//	if (std::abs(tEyz) <= 1e-150) {
+//		tEyz = 0.0;
+//	}
+//	if (std::abs(tEzx) <= 1e-150) {
+//		tEzx = 0.0;
+//	}
+//	if (std::abs(tEzy) <= 1e-150) {
+//		tEzy = 0.0;
+//	}
+//
+//	cube_split.Exy(i, j, k) = tExy;
+//	cube_split.Exz(i, j, k) = tExz;
+//	cube_split.Eyx(i, j, k) = tEyx;
+//	cube_split.Eyz(i, j, k) = tEyz;
+//	cube_split.Ezx(i, j, k) = tEzx;
+//	cube_split.Ezy(i, j, k) = tEzy;
+//}
+//
+
+
+
 
 
 //template <class ftype, class ftypePML>
@@ -811,12 +1598,56 @@ void Update_PMLBound_electric(Fields<ftype> cube,
 			}
 			*/
 
-	int i = delta_x;
-	int j = 1, k = 1;
-	Update_electric_field_PML_sycl_half_version_bound_2<ftype, ftypePML>
-		(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
-	if(IsPrint)
-		std::cout << "Update_PMLBound_electric: " << i << " " << j << " " << k << std::endl;
+	if (sizeof(ftype) == 2) {
+		// YZ
+		for (int i = delta_x; i != 0; i = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_electric_field_PML_sycl_bound_2_half_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+
+		// XY
+		for (int k = delta_z; k != 0; k = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++) {
+					Update_electric_field_PML_sycl_bound_2_half_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+		// XZ
+		for (int j = delta_y; j != 0; j = 0)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_electric_field_PML_sycl_bound_2_half_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+	}
+	else {
+		// YZ
+		for (int i = delta_x; i != 0; i = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_electric_field_PML_sycl_bound_2_float_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+
+		// XY
+		for (int k = delta_z; k != 0; k = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++) {
+					Update_electric_field_PML_sycl_bound_2_float_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+		// XZ
+		for (int j = delta_y; j != 0; j = 0)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_electric_field_PML_sycl_bound_2_float_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+	}
+
+	
 }
 
 /*
@@ -827,17 +1658,17 @@ inline void Update_magnetic_field_PML_sycl_half_version(Fields<ftype> cube,
 {
 	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
 	if (sizeof(ftype) == 2 && sizeof(ftypePML) == 4) {
-		tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - (cl::sycl::detail::half2Float(cube.Ez(i, j, k)) - cl::sycl::detail::half2Float(cube.Ez(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
+		tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - (float(cube.Ez(i, j, k)) - float(cube.Ez(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
 
-		tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + (cl::sycl::detail::half2Float(cube.Ey(i, j, k)) - cl::sycl::detail::half2Float(cube.Ey(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
+		tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + (float(cube.Ey(i, j, k)) - float(cube.Ey(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
 		
-		tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + (cl::sycl::detail::half2Float(cube.Ez(i, j, k)) - cl::sycl::detail::half2Float(cube.Ez(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
+		tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + (float(cube.Ez(i, j, k)) - float(cube.Ez(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
 
-		tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - (cl::sycl::detail::half2Float(cube.Ex(i, j, k)) - cl::sycl::detail::half2Float(cube.Ex(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
+		tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - (float(cube.Ex(i, j, k)) - float(cube.Ex(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
 
-		tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - (cl::sycl::detail::half2Float(cube.Ey(i, j, k)) - cl::sycl::detail::half2Float(cube.Ey(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
+		tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - (float(cube.Ey(i, j, k)) - float(cube.Ey(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
 
-		tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + (cl::sycl::detail::half2Float(cube.Ex(i, j, k)) - cl::sycl::detail::half2Float(cube.Ex(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
+		tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + (float(cube.Ex(i, j, k)) - float(cube.Ex(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
 	} else {
 		tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - (cube.Ez(i, j, k) - cube.Ez(i, j - 1, k)) * Coeff.Bxy2(i, j, k) * (_1dy);
 
@@ -890,141 +1721,54 @@ inline void Update_magnetic_field_PML_sycl_half_version(Fields<ftype> cube,
 }
 */
 
-template <class ftype, class ftypePML>
-inline void Update_magnetic_field_PML_sycl_half_version(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
-	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
-{
-	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
 
-	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - ((cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k)) - (cube_split.Ezx(i, j - 1, k) + cube_split.Ezy(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
+//template <class ftype, class ftypePML>
+//inline void Update_magnetic_field_PML_sycl_half_version_bound(Fields<ftype> cube,
+//	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
+//	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
+//{
+//	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
+//
+//	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - ((ftypePML)float(cube.Ez(i, j, k)) - (ftypePML)float(cube.Ez(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
+//
+//	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + ((ftypePML)float(cube.Ey(i, j, k)) - (ftypePML)float(cube.Ey(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
+//	
+//	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + ((ftypePML)float(cube.Ez(i, j, k)) - (ftypePML)float(cube.Ez(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
+//
+//	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - ((ftypePML)float(cube.Ex(i, j, k)) - (ftypePML)float(cube.Ex(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
+//
+//	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - ((ftypePML)float(cube.Ey(i, j, k)) - (ftypePML)float(cube.Ey(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
+//
+//	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + ((ftypePML)float(cube.Ex(i, j, k)) - (ftypePML)float(cube.Ex(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
+//
+//	if (std::abs(tBxy) <= 1e-150) {
+//		tBxy = 0.0;
+//	}
+//	if (std::abs(tBxz) <= 1e-150) {
+//		tBxz = 0.0;
+//	}
+//	if (std::abs(tByx) <= 1e-150) {
+//		tByx = 0.0;
+//	}
+//	if (std::abs(tByz) <= 1e-150) {
+//		tByz = 0.0;
+//	}
+//	if (std::abs(tBzx) <= 1e-150) {
+//		tBzx = 0.0;
+//	}
+//	if (std::abs(tBzy) <= 1e-150) {
+//		tBzy = 0.0;
+//	}
+//
+//	cube_split.Bxy(i, j, k) = tBxy;
+//	cube_split.Bxz(i, j, k) = tBxz;
+//	cube_split.Byx(i, j, k) = tByx;
+//	cube_split.Byz(i, j, k) = tByz;
+//	cube_split.Bzx(i, j, k) = tBzx;
+//	cube_split.Bzy(i, j, k) = tBzy;
+//}
 
-	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + ((cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k)) - (cube_split.Eyx(i, j, k - 1) + cube_split.Eyz(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
 
-	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + ((cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k)) - (cube_split.Ezx(i - 1, j, k) + cube_split.Ezy(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
-
-	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - ((cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k)) - (cube_split.Exy(i, j, k - 1) + cube_split.Exz(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
-
-	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - ((cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k)) - (cube_split.Eyx(i - 1, j, k) + cube_split.Eyz(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
-
-	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + ((cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k)) - (cube_split.Exy(i, j - 1, k) + cube_split.Exz(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
-	if (std::abs(tBxy) <= 1e-150) {
-		tBxy = 0.0;
-	}
-	if (std::abs(tBxz) <= 1e-150) {
-		tBxz = 0.0;
-	}
-	if (std::abs(tByx) <= 1e-150) {
-		tByx = 0.0;
-	}
-	if (std::abs(tByz) <= 1e-150) {
-		tByz = 0.0;
-	}
-	if (std::abs(tBzx) <= 1e-150) {
-		tBzx = 0.0;
-	}
-	if (std::abs(tBzy) <= 1e-150) {
-		tBzy = 0.0;
-	}
-
-	cube_split.Bxy(i, j, k) = tBxy;
-	cube_split.Bxz(i, j, k) = tBxz;
-	cube_split.Byx(i, j, k) = tByx;
-	cube_split.Byz(i, j, k) = tByz;
-	cube_split.Bzx(i, j, k) = tBzx;
-	cube_split.Bzy(i, j, k) = tBzy;
-}
-
-template <class ftype, class ftypePML>
-inline void Update_magnetic_field_PML_sycl_half_version_bound(Fields<ftype> cube,
-	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
-	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
-{
-	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
-
-	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - ((ftypePML)cl::sycl::detail::half2Float(cube.Ez(i, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Ez(i, j - 1, k))) * Coeff.Bxy2(i, j, k) * (_1dy);
-
-	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + ((ftypePML)cl::sycl::detail::half2Float(cube.Ey(i, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Ey(i, j, k - 1))) * Coeff.Bxz2(i, j, k) * (_1dz);
-	
-	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + ((ftypePML)cl::sycl::detail::half2Float(cube.Ez(i, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Ez(i - 1, j, k))) * Coeff.Byx2(i, j, k) * (_1dx);
-
-	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - ((ftypePML)cl::sycl::detail::half2Float(cube.Ex(i, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Ex(i, j, k - 1))) * Coeff.Byz2(i, j, k) * (_1dz);
-
-	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - ((ftypePML)cl::sycl::detail::half2Float(cube.Ey(i, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Ey(i - 1, j, k))) * Coeff.Bzx2(i, j, k) * (_1dx);
-
-	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + ((ftypePML)cl::sycl::detail::half2Float(cube.Ex(i, j, k)) - (ftypePML)cl::sycl::detail::half2Float(cube.Ex(i, j - 1, k))) * Coeff.Bzy2(i, j, k) * (_1dy);
-
-	if (std::abs(tBxy) <= 1e-150) {
-		tBxy = 0.0;
-	}
-	if (std::abs(tBxz) <= 1e-150) {
-		tBxz = 0.0;
-	}
-	if (std::abs(tByx) <= 1e-150) {
-		tByx = 0.0;
-	}
-	if (std::abs(tByz) <= 1e-150) {
-		tByz = 0.0;
-	}
-	if (std::abs(tBzx) <= 1e-150) {
-		tBzx = 0.0;
-	}
-	if (std::abs(tBzy) <= 1e-150) {
-		tBzy = 0.0;
-	}
-
-	cube_split.Bxy(i, j, k) = tBxy;
-	cube_split.Bxz(i, j, k) = tBxz;
-	cube_split.Byx(i, j, k) = tByx;
-	cube_split.Byz(i, j, k) = tByz;
-	cube_split.Bzx(i, j, k) = tBzx;
-	cube_split.Bzy(i, j, k) = tBzy;
-}
-
-template <class ftype, class ftypePML>
-inline void Update_magnetic_field_PML_sycl_half_version_bound_2(Fields<ftype> cube,
-	SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
-	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int i, int j, int k)
-{
-	ftypePML tBxy, tBxz, tByx, tByz, tBzx, tBzy;
-
-	tBxy = cube_split.Bxy(i, j, k) * Coeff.Bxy1(i, j, k) - ((ftypePML)cube.Ez(i, j, k) - (ftypePML)cube.Ez(i, j - 1, k)) * Coeff.Bxy2(i, j, k) * (_1dy);
-
-	tBxz = cube_split.Bxz(i, j, k) * Coeff.Bxz1(i, j, k) + ((ftypePML)cube.Ey(i, j, k) - (ftypePML)cube.Ey(i, j, k - 1)) * Coeff.Bxz2(i, j, k) * (_1dz);
-
-	tByx = cube_split.Byx(i, j, k) * Coeff.Byx1(i, j, k) + ((ftypePML)cube.Ez(i, j, k) - (ftypePML)cube.Ez(i - 1, j, k)) * Coeff.Byx2(i, j, k) * (_1dx);
-
-	tByz = cube_split.Byz(i, j, k) * Coeff.Byz1(i, j, k) - ((ftypePML)cube.Ex(i, j, k) - (ftypePML)cube.Ex(i, j, k - 1)) * Coeff.Byz2(i, j, k) * (_1dz);
-
-	tBzx = cube_split.Bzx(i, j, k) * Coeff.Bzx1(i, j, k) - ((ftypePML)cube.Ey(i, j, k) - (ftypePML)cube.Ey(i - 1, j, k)) * Coeff.Bzx2(i, j, k) * (_1dx);
-
-	tBzy = cube_split.Bzy(i, j, k) * Coeff.Bzy1(i, j, k) + ((ftypePML)cube.Ex(i, j, k) - (ftypePML)cube.Ex(i, j - 1, k)) * Coeff.Bzy2(i, j, k) * (_1dy);
-
-	if (std::abs(tBxy) <= 1e-150) {
-		tBxy = 0.0;
-	}
-	if (std::abs(tBxz) <= 1e-150) {
-		tBxz = 0.0;
-	}
-	if (std::abs(tByx) <= 1e-150) {
-		tByx = 0.0;
-	}
-	if (std::abs(tByz) <= 1e-150) {
-		tByz = 0.0;
-	}
-	if (std::abs(tBzx) <= 1e-150) {
-		tBzx = 0.0;
-	}
-	if (std::abs(tBzy) <= 1e-150) {
-		tBzy = 0.0;
-	}
-
-	cube_split.Bxy(i, j, k) = tBxy;
-	cube_split.Bxz(i, j, k) = tBxz;
-	cube_split.Byx(i, j, k) = tByx;
-	cube_split.Byz(i, j, k) = tByz;
-	cube_split.Bzx(i, j, k) = tBzx;
-	cube_split.Bzy(i, j, k) = tBzy;
-}
 
 template <class ftype, class ftypePML>
 void Update_PMLBound_magnetic(Fields<ftype> cube,
@@ -1052,23 +1796,56 @@ void Update_PMLBound_magnetic(Fields<ftype> cube,
 			}
 	*/
 
-	int i = Nx + delta_x + 1;
-	int j = 1, k = 1;
-	Update_magnetic_field_PML_sycl_half_version_bound_2<ftype, ftypePML>
-		(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
-	if (IsPrint)
-		std::cout << "Update_PMLBound_magnetic: " << i << " " << j << " " << k << std::endl;
+	if (sizeof(ftype) == 2) {
+		// YZ
+		for (int i = Nx + delta_x + 1; i != Nx + 1; i = Nx + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_magnetic_field_PML_sycl_bound_2_half_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+		// XY
+		for (int k = Nz + delta_z + 1; k != Nz + 1; k = Nz + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++) {
+					Update_magnetic_field_PML_sycl_bound_2_half_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+		// XZ
+		for (int j = Ny + delta_y + 1; j != Ny + 1; j = Ny + 1)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_magnetic_field_PML_sycl_bound_2_half_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+	}
+	else {
+		// YZ
+		for (int i = Nx + delta_x + 1; i != Nx + 1; i = Nx + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_magnetic_field_PML_sycl_bound_2_float_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+		// XY
+		for (int k = Nz + delta_z + 1; k != Nz + 1; k = Nz + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++) {
+					Update_magnetic_field_PML_sycl_bound_2_float_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+		// XZ
+		for (int j = Ny + delta_y + 1; j != Ny + 1; j = Ny + 1)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++) {
+					Update_magnetic_field_PML_sycl_bound_2_float_version<ftype, ftypePML>
+						(cube, cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
+				}
+	}
 
+	
 }
 
-template <class ftype, class ftypePML>
-void CubeSplit2Cube_electric(Fields<ftype> cube,
-	SplitFields<ftypePML> cube_split, int i, int j, int k) {
-
-	cube.Ex(i, j, k) = (ftype)(cube_split.Exy(i, j, k) + cube_split.Exz(i, j, k));
-	cube.Ey(i, j, k) = (ftype)(cube_split.Eyx(i, j, k) + cube_split.Eyz(i, j, k));
-	cube.Ez(i, j, k) = (ftype)(cube_split.Ezx(i, j, k) + cube_split.Ezy(i, j, k));
-}
 
 template <class ftype, class ftypePML>
 void Run_CubeSplit2Cube_electric(Fields<ftype> cube,
@@ -1116,26 +1893,81 @@ void Run_CubeSplit2Cube_electric(Fields<ftype> cube,
 				CubeSplit2Cube_electric<ftype, ftypePML>(cube, cube_split, i, j, k);
 			}
 			*/
-	int i = delta_x, j = 1, k = 1;
-	CubeSplit2Cube_electric<ftype, ftypePML>(cube, cube_split, i, j, k);
-	if (IsPrint)
-		std::cout << "Run_CubeSplit2Cube_electric: " << i << " " << j << " " << k << std::endl;
 
-	i = Nx + delta_x + 1; j = 1; k = 1;
-	CubeSplit2Cube_electric<ftype, ftypePML>(cube, cube_split, i, j, k);
-	if (IsPrint)
-		std::cout << "Run_CubeSplit2Cube_electric: " << i << " " << j << " " << k << std::endl;
+	if (sizeof(ftype) == 2) {
+		// YZ
+		for (int i = delta_x; i != 0; i = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// XY
+		for (int k = delta_z; k != 0; k = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_electric_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ
+		for (int j = delta_y; j != 0; j = 0)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// YZ x=n
+		for (int i = Nx + delta_x + 1; i != Nx + 1; i = Nx + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XY z=n
+		for (int k = Nz + delta_z + 1; k != Nz + 1; k = Nz + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_electric_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ y=n
+		for (int j = Ny + delta_y + 1; j != Ny + 1; j = Ny + 1)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+	}
+	else {
+		// YZ
+		for (int i = delta_x; i != 0; i = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// XY
+		for (int k = delta_z; k != 0; k = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_electric_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ
+		for (int j = delta_y; j != 0; j = 0)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// YZ x=n
+		for (int i = Nx + delta_x + 1; i != Nx + 1; i = Nx + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XY z=n
+		for (int k = Nz + delta_z + 1; k != Nz + 1; k = Nz + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_electric_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ y=n
+		for (int j = Ny + delta_y + 1; j != Ny + 1; j = Ny + 1)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_electric_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+	}
+	
+	
 }
 
 
-template <class ftype, class ftypePML>
-inline void CubeSplit2Cube_magnetic(Fields<ftype> cube,
-	SplitFields<ftypePML> cube_split, int i, int j, int k) {
 
-	cube.Bx(i, j, k) = (ftype)(cube_split.Bxy(i, j, k) + cube_split.Bxz(i, j, k));
-	cube.By(i, j, k) = (ftype)(cube_split.Byx(i, j, k) + cube_split.Byz(i, j, k));
-	cube.Bz(i, j, k) = (ftype)(cube_split.Bzx(i, j, k) + cube_split.Bzy(i, j, k));
-}
 
 template <class ftype, class ftypePML>
 void Run_CubeSplit2Cube_magnetic(Fields<ftype> cube,
@@ -1183,62 +2015,79 @@ void Run_CubeSplit2Cube_magnetic(Fields<ftype> cube,
 				CubeSplit2Cube_magnetic<ftype, ftypePML>(cube, cube_split, i, j, k);
 			}
 */
-	int i = delta_x, j = 1, k = 1;
-	CubeSplit2Cube_magnetic<ftype, ftypePML>(cube, cube_split, i, j, k);
-	if (IsPrint)
-		std::cout << "Run_CubeSplit2Cube_magnetic: " << i << " " << j << " " << k << std::endl;
 
-	i = Nx + delta_x + 1; j = 1; k = 1;
-	CubeSplit2Cube_magnetic<ftype, ftypePML>(cube, cube_split, i, j, k);
-	if (IsPrint)
-		std::cout << "Run_CubeSplit2Cube_magnetic: " << i << " " << j << " " << k << std::endl;
-}
+	if (sizeof(ftype) == 2) {
+		// YZ
+		for (int i = delta_x; i != 0; i = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
 
-template <class ftype, class ftypePML>
-void Update_PML_electric(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
-	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z) {
+		// XY
+		for (int k = delta_z; k != 0; k = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_magnetic_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ
+		for (int j = delta_y; j != 0; j = 0)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// YZ x=n
+		for (int i = Nx + delta_x + 1; i != Nx + 1; i = Nx + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XY z=n
+		for (int k = Nz + delta_z + 1; k != Nz + 1; k = Nz + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_magnetic_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ y=n
+		for (int j = Ny + delta_y + 1; j != Ny + 1; j = Ny + 1)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_half_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+	}
+	else {
+		// YZ
+		for (int i = delta_x; i != 0; i = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// XY
+		for (int k = delta_z; k != 0; k = 0)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_magnetic_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ
+		for (int j = delta_y; j != 0; j = 0)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+
+		// YZ x=n
+		for (int i = Nx + delta_x + 1; i != Nx + 1; i = Nx + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XY z=n
+		for (int k = Nz + delta_z + 1; k != Nz + 1; k = Nz + 1)
+			for (int j = delta_y + 1; j < Ny + delta_y + 1; j++)
+				for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+					CubeSplit2Cube_magnetic_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+		// XZ y=n
+		for (int j = Ny + delta_y + 1; j != Ny + 1; j = Ny + 1)
+			for (int i = delta_x + 1; i < Nx + delta_x + 1; i++)
+				for (int k = delta_z + 1; k < Nz + delta_z + 1; k++)
+					CubeSplit2Cube_magnetic_float_version<ftype, ftypePML>(cube, cube_split, i, j, k);
+	}
+
 	
-	int j = 1; int k = 1;
-	for (int i = 1; i < delta_x; i += 1) {
-
-		Update_electric_field_PML_sycl_half_version<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
-		if (IsPrint)
-			std::cout << "Update_PML_electric: " << i << " " << j << " " << k << std::endl;
-	}
-
-	std::cout << std::endl;
-	
-	for (int i = Nx + delta_x + 1; i < Nx + 2 * delta_x + 1; i += 1) {
-
-		Update_electric_field_PML_sycl_half_version<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
-		if (IsPrint)
-			std::cout << "Update_PML_electric: " << i << " " << j << " " << k << std::endl;
-	}
-
 }
 
-template <class ftype, class ftypePML>
-void Update_PML_magnetic(SplitFields<ftypePML> cube_split, Coefficient<ftypePML> Coeff,
-	ftypePML _1dx, ftypePML _1dy, ftypePML _1dz, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z) {
-
-	int j = 1; int k = 1;
-	for (int i = 1; i < delta_x + 1; i += 1) {
-
-		Update_magnetic_field_PML_sycl_half_version<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
-		if (IsPrint)
-			std::cout << "Update_PML_magnetic: " << i << " " << j << " " << k << std::endl;
-	}
-
-	std::cout << std::endl;
-
-	for (int i = Nx + delta_x + 2; i < Nx + 2 * delta_x + 1; i += 1) {
-
-		Update_magnetic_field_PML_sycl_half_version<ftype, ftypePML>(cube_split, Coeff, _1dx, _1dy, _1dz, i, j, k);
-		if (IsPrint)
-			std::cout << "Update_PML_magnetic: " << i << " " << j << " " << k << std::endl;
-	}
-
-}
 
 template <class ftype, class ftypePML>
 void Update_PeriodicBound_electric(Fields<ftype> cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z) {
@@ -1261,45 +2110,6 @@ void Update_PeriodicBound_electric(Fields<ftype> cube, int Nx, int Ny, int Nz, i
 	}
 }
 
-template <class ftype, class ftypePML>
-void Update_PeriodicBound_magnetic(Fields<ftype> cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z) {
-	for (int i = delta_x + 1; i < Nx + delta_x + 1; i += 1) {
-
-		cube.Bx(i, 1, 0) = cube.Bx(i, 1, 1);
-		cube.Bx(i, 1, 2) = cube.Bx(i, 1, 1);
-		cube.Bx(i, 0, 1) = cube.Bx(i, 1, 1);
-		cube.Bx(i, 2, 1) = cube.Bx(i, 1, 1);
-
-		cube.By(i, 1, 0) = cube.By(i, 1, 1);
-		cube.By(i, 1, 2) = cube.By(i, 1, 1);
-		cube.By(i, 0, 1) = cube.By(i, 1, 1);
-		cube.By(i, 2, 1) = cube.By(i, 1, 1);
-
-		cube.Bz(i, 1, 0) = cube.Bz(i, 1, 1);
-		cube.Bz(i, 1, 2) = cube.Bz(i, 1, 1);
-		cube.Bz(i, 0, 1) = cube.Bz(i, 1, 1);
-		cube.Bz(i, 2, 1) = cube.Bz(i, 1, 1);
-	}
-}
-
-//template <class ftype>
-//double CalculateEnergy_sycl_half_version(Fields<ftype> cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
-//{
-//	double energy = 0.0;
-//
-//	for (int i = 1; i < Nx + 2 * delta_x + 1; i++)
-//		for (int j = 1; j < Ny + 2 * delta_y + 1; j++)
-//			for (int k = 1; k < Nz + 2 * delta_z + 1; k++)
-//			{
-//				energy += cl::sycl::detail::half2Float(cube.Ex(i, j, k)) * cl::sycl::detail::half2Float(cube.Ex(i, j, k))
-//					+ cl::sycl::detail::half2Float(cube.Ey(i, j, k)) * cl::sycl::detail::half2Float(cube.Ey(i, j, k))
-//					+ cl::sycl::detail::half2Float(cube.Ez(i, j, k)) * cl::sycl::detail::half2Float(cube.Ez(i, j, k));
-//				energy += cl::sycl::detail::half2Float(cube.Bx(i, j, k)) * cl::sycl::detail::half2Float(cube.Bx(i, j, k))
-//					+ cl::sycl::detail::half2Float(cube.By(i, j, k)) * cl::sycl::detail::half2Float(cube.By(i, j, k))
-//					+ cl::sycl::detail::half2Float(cube.Bz(i, j, k)) * cl::sycl::detail::half2Float(cube.Bz(i, j, k));
-//			}
-//	return energy;
-//}
 
 template <class ftype>
 void Graph_Solution_sycl(Fields<ftype>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z,
@@ -1366,26 +2176,115 @@ double CalculateEnergy_sycl_half_version(Fields<ftype>& cube, int Nx, int Ny, in
 		numbEy.close();
 	return energy;
 }
+
 template <class ftype>
-double CalculateEnergy_sycl_half_version(Fields<ftype>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
+float CalculateEnergy_sycl_float_version(sycl::queue& q, Fields<ftype>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
 {
-	double energy = 0.0, temp;
+	float host_energy = 0.0;
+	try {
+		float* energy = malloc_shared<float>(1, q);
+		*energy = 0.f;
 
-	for (int i = 1 + delta_x; i < Nx + delta_x + 1; i++)
-		for (int j = 1 + delta_y; j < Ny + delta_y + 1; j++)
-			for (int k = 1 + delta_z; k < Nz + delta_z + 1; k++)
-			{
-				temp = 0.0;
-				temp += (double)cube.Ex(i, j, k) * (double)cube.Ex(i, j, k)
-					+ (double)cube.Ey(i, j, k) * (double)cube.Ey(i, j, k)
-					+ (double)cube.Ez(i, j, k) * (double)cube.Ez(i, j, k);
-				temp += (double)cube.Bx(i, j, k) * (double)cube.Bx(i, j, k)
-					+ (double)cube.By(i, j, k) * (double)cube.By(i, j, k)
-					+ (double)cube.Bz(i, j, k) * (double)cube.Bz(i, j, k);
+		q.submit([&](sycl::handler& h) {
 
-				energy += temp;
-			}
-	return energy;
+			h.parallel_for(range<3>(Nx, Ny, Nz),
+				reduction(energy, 0.f, std::plus<float>()),
+				[=](auto index, auto& energy) {
+
+					auto kernel_cube = cube;
+
+					int i = index[0] + delta_x + 1;
+					int j = index[1] + delta_y + 1;
+					int k = index[2] + delta_z + 1;
+
+					float e, b;
+
+					e = kernel_cube.Ex(i, j, k) * kernel_cube.Ex(i, j, k)
+						+ kernel_cube.Ey(i, j, k) * kernel_cube.Ey(i, j, k)
+						+ kernel_cube.Ez(i, j, k) * kernel_cube.Ez(i, j, k);
+					b = kernel_cube.Bx(i, j, k) * kernel_cube.Bx(i, j, k)
+						+ kernel_cube.By(i, j, k) * kernel_cube.By(i, j, k)
+						+ kernel_cube.Bz(i, j, k) * kernel_cube.Bz(i, j, k);
+
+					energy += e + b;
+				});
+			}).wait_and_throw();
+
+			//for (int i = 1 + delta_x; i < Nx + delta_x + 1; i++)
+			//	for (int j = 1 + delta_y; j < Ny + delta_y + 1; j++)
+			//		for (int k = 1 + delta_z; k < Nz + delta_z + 1; k++)
+			//		{
+			//			temp = 0.0;
+			//			temp += (double)cube.Ex(i, j, k) * (double)cube.Ex(i, j, k)
+			//				+ (double)cube.Ey(i, j, k) * (double)cube.Ey(i, j, k)
+			//				+ (double)cube.Ez(i, j, k) * (double)cube.Ez(i, j, k);
+			//			temp += (double)cube.Bx(i, j, k) * (double)cube.Bx(i, j, k)
+			//				+ (double)cube.By(i, j, k) * (double)cube.By(i, j, k)
+			//				+ (double)cube.Bz(i, j, k) * (double)cube.Bz(i, j, k);
+			//			energy += temp;
+			//		}
+		host_energy = *energy;
+		free(energy, q);
+	}
+	catch (sycl::exception const& e) {
+		std::cout << "ERROR\n" << e.get_cl_code() << std::endl << e.what();
+		std::terminate();
+	}
+
+	return host_energy;
+}
+
+template <class ftype>
+float CalculateEnergy_sycl_half_version(sycl::queue& q, Fields<ftype>& cube, int Nx, int Ny, int Nz, int delta_x, int delta_y, int delta_z)
+{
+	float host_energy = 0.0;
+	try {
+		float* energy = malloc_shared<float>(1, q);
+		*energy = 0.f;
+
+		q.submit([&](sycl::handler& h) {
+			sycl::stream out(4096, 4096, h);
+			h.parallel_for(range<3>(Nx, Ny, Nz),
+				reduction(energy, 0.f, std::plus<float>()),
+				[=](auto index, auto& energy) {
+
+					auto kernel_cube = cube;
+
+					int i = index[0] + delta_x + 1;
+					int j = index[1] + delta_y + 1;
+					int k = index[2] + delta_z + 1;
+
+					//float e, b;
+					//e = kernel_cube.Ex(i, j, k) * kernel_cube.Ex(i, j, k)
+					//	+ kernel_cube.Ey(i, j, k) * kernel_cube.Ey(i, j, k)
+					//	+ kernel_cube.Ez(i, j, k) * kernel_cube.Ez(i, j, k);
+					//b = kernel_cube.Bx(i, j, k) * kernel_cube.Bx(i, j, k)
+					//	+ kernel_cube.By(i, j, k) * kernel_cube.By(i, j, k)
+					//	+ kernel_cube.Bz(i, j, k) * kernel_cube.Bz(i, j, k);
+
+					float e, b;
+					e = float(kernel_cube.Ex(i, j, k)) * float(kernel_cube.Ex(i, j, k))
+						+ float(kernel_cube.Ey(i, j, k)) * float(kernel_cube.Ey(i, j, k))
+						+ float(kernel_cube.Ez(i, j, k)) * float(kernel_cube.Ez(i, j, k));
+					b = float(kernel_cube.Bx(i, j, k)) * float(kernel_cube.Bx(i, j, k))
+						+ float(kernel_cube.By(i, j, k)) * float(kernel_cube.By(i, j, k))
+						+ float(kernel_cube.Bz(i, j, k)) * float(kernel_cube.Bz(i, j, k));
+
+					energy += e + b;
+					//if (e > 0. || b > 0.)
+						//out << e << " " << b <<   sycl::endl;
+				});
+			}).wait_and_throw();
+
+			host_energy = *energy;
+			free(energy, q);
+	}
+	catch (sycl::exception const& e) {
+		std::cout << "ERROR\n" << e.get_cl_code() << std::endl << e.what();
+		std::terminate();
+	}
+
+	return host_energy;
 }
 
 template <class ftypePML, class type = float>
